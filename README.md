@@ -1,4 +1,4 @@
-# pm_dc
+# Process Management and Distributed Computing
 Assignment: Process Management and Distributed Computing
 
 The client and server will be implemented in the C programming language using BSD sockets
