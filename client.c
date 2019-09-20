@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
     // Checking arguments
     if (argc < 3)
     {
-        fprintf(stderr, "Error: usage %s hostname port\n", argv[0]);
+        fprintf(stderr, "Error: usage %s hostname port.\n", argv[0]);
         exit(0);
     }
 
@@ -63,41 +63,51 @@ int main(int argc, char *argv[])
     server = gethostbyname(argv[1]);
     if (server == NULL)
     {
-        fprintf(stderr, "Error in identifying the host\n");
+        fprintf(stderr, "Error in identifying the host.\n");
         exit(0);
     }
 
-    bzero((char *)&serv_addr, sizeof(serv_addr));
+    memset(&serv_addr, 0, sizeof(serv_addr));
 
     // Setting the server family
     serv_addr.sin_family = AF_INET;
 
-    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    memcpy((char *)server->h_addr_list[0], (char *)&serv_addr.sin_addr.s_addr, server->h_length);
 
     // Convert port number to host byte order
     serv_addr.sin_port = htons(port_no);
     if (connect(socket_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        error("Error connecting to server");
+        error("Error connecting to server.");
     }
 
-    printf("Please enter the message: ");
-    bzero(buffer, 256);
-    fgets(buffer, 255, stdin);
-    num = write(socket_fd, buffer, strlen(buffer));
-    if (num < 0)
+    while (1)
     {
-        error("Error in writing to socket");
-    }
+        memset(&buffer, 0, sizeof(buffer));
+        // bzero(buffer, 256);
+        num = read(socket_fd, buffer, 255);
+        if (num < 0)
+        {
+            error("Error in reading from socket.");
+        }
 
-    bzero(buffer, 256);
-    num = read(socket_fd, buffer, 255);
-    if (num < 0)
-    {
-        error("Error in reading from socket");
-    }
+        printf("%s\n",buffer);
 
-    printf("%s\n", buffer);
+        if(strcmp(buffer, "Disconnecting from server.") == 0){
+            break;
+        }
+
+        memset(&buffer, 0, sizeof(buffer));
+        fgets(buffer, 255, stdin);
+       
+        int num = write(socket_fd, buffer, strlen(buffer));
+        if (num < 0)
+        {
+            error("Error in writing to socket");
+        }
+       
+        
+    }
     close(socket_fd);
     return 0;
 }
