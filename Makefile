@@ -1,4 +1,4 @@
-CC = c99  
+CC = 
 CFLAGS = -g -Wall 
 LIBS = -lrt -pthread 
 
