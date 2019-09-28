@@ -9,66 +9,127 @@
 */
 
 // Includes
-#include <netdb.h> 
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <string.h> 
-#include <sys/socket.h> 
-#define MAX 80 
-#define PORT 8080 
-#define SA struct sockaddr 
-void func(int sockfd) 
-{ 
-    char buff[MAX]; 
-    int n; 
-    for (;;) { 
-        bzero(buff, sizeof(buff)); 
-        printf("Enter the string : "); 
-        n = 0; 
-        while ((buff[n++] = getchar()) != '\n') 
-            ; 
-        write(sockfd, buff, sizeof(buff)); 
-        bzero(buff, sizeof(buff)); 
-        read(sockfd, buff, sizeof(buff)); 
-        printf("From Server : %s", buff); 
-        if ((strncmp(buff, "exit", 4)) == 0) { 
-            printf("Client Exit...\n"); 
-            break; 
-        } 
-    } 
-} 
-  
-int main() 
-{ 
-    int sockfd, connfd; 
-    struct sockaddr_in servaddr, cli; 
-  
-    // socket create and varification 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0); 
-    if (sockfd == -1) { 
-        printf("socket creation failed...\n"); 
-        exit(0); 
-    } 
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <signal.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <fcntl.h> 
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define MAX_BUFFER 255
+#define SA struct sockaddr
+
+// Global variables
+int socket_server, socket_client;
+
+/**
+ * Exit function 
+ */
+void signal_callback_handler(int signum)
+{
+    printf("\nDisconnecting client from server.\n");
+    close(socket_client);
+    
+    printf("Client disconnected.\n");
+    // Exit program
+    exit(signum);
+}
+
+/**
+ * Chat function
+ * Will handle the server communication 
+*/
+void chat()
+{
+    char buff[MAX_BUFFER];
+    int n;
+
+    memset(buff, 0, sizeof(buff));
+    read(socket_server, buff, sizeof(buff));
+    printf("%s", buff);
+    
+    // Looping till the client exits
+    for (;;)
+    {
+        // Setting the buffer all zeros
+        memset(buff,0, sizeof(buff));
+
+        printf("Enter the string : ");
+        n = 0;
+        // Getting input from the client
+        while ((buff[n++] = getchar()) != '\n')
+            ;
+
+        write(socket_server, buff, sizeof(buff));
+
+        // Setting the buffer all zeros
+        memset(buff,0, sizeof(buff));
+
+        // Reading from server
+        read(socket_server, buff, sizeof(buff));
+        printf("From Server : %s", buff);
+
+        if ((strncmp(buff, "exit", 4)) == 0)
+        {
+            printf("Client Exit...\n");
+            break;
+        }
+        // Detect SIGINT
+        signal(SIGINT, signal_callback_handler);
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    struct sockaddr_in servaddr, cli;
+
+    // Creating socket
+    socket_server = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_server == -1)
+    {
+        printf("Client Error: socket creation failed.\n");
+        exit(-1);
+    }
+
+    memset(&servaddr, 0, sizeof(servaddr));
+
+    // Server configuration
+    if (argc < 3)
+    {
+        fprintf(stderr, "Error: usage %s hostname port.\n", argv[0]);
+        exit(-1);
+    }
     else
-        printf("Socket successfully created..\n"); 
-    bzero(&servaddr, sizeof(servaddr)); 
-  
-    // assign IP, PORT 
-    servaddr.sin_family = AF_INET; 
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); 
-    servaddr.sin_port = htons(PORT); 
-  
-    // connect the client socket to server socket 
-    if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) { 
-        printf("connection with the server failed...\n"); 
-        exit(0); 
-    } 
-    else
-        printf("connected to the server..\n"); 
-  
-    // function for chat 
-    func(sockfd); 
-  
-    // close the socket 
-    close(sockfd); 
-} 
+    {
+        if (argv[1] != NULL && argv[2] != NULL)
+        {
+            servaddr.sin_family = AF_INET;
+            servaddr.sin_addr.s_addr = inet_addr(argv[1]); 
+            servaddr.sin_port = htons(atoi(argv[2]));
+        }
+        else
+        {
+            fprintf(stderr, "Client Error: Error identifying host.\n");
+            exit(-1);
+        }
+    }
+
+    // Client server connection
+    if (connect(socket_server, (SA *)&servaddr, sizeof(servaddr)) != 0)
+    {
+        printf("Client Error: Connection failed.\n");
+        exit(-1);
+    }
+
+    // Detect SIGINT
+        signal(SIGINT, signal_callback_handler);
+
+    // Function for chatting between client and server
+    chat();
+
+    // After chatting closing the socket
+    close(socket_server);
+}
