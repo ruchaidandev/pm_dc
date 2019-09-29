@@ -19,32 +19,81 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define MAX_BUFFER 255
 #define DEFAULT_PORT 12345
 #define MAX_CLIENT_QUEUE 5
 #define SOCKET_ADDRESS struct sockaddr
 
-// Global variables
-int socket_server;
+// Stuctures
+struct Message
+{
+    int message_id;
+    int sender_id;
+    int *read_by;
+};
+
+struct Channel
+{
+    int channel_id;
+    struct Message *messages;
+    bool is_subscribed;
+};
+
 struct Client
 {
     int client_id;
-    uint8_t channel_id;
+    struct Channel *channels;
+    int channel_count;
+    int channel_capacity;
 };
+
+// Global variables
+int socket_server;
+struct Channel channels[256];
 
 /**
  * Exit function 
  */
 void signal_callback_handler(int signum)
 {
-    printf("\nClosing server.\n");
+    printf("Closing server.\n");
     close(socket_server);
 
     printf("Server closed.\n");
     // Exit program
     exit(signum);
 }
+
+int checkClientInChannel(struct Client *cl, int channel_id)
+{
+    for (int counter = 0; counter < cl->channel_count; counter++)
+    {
+        if (cl->channels[counter].channel_id == channel_id)
+        {
+            return counter;
+        }
+    }
+    return -1;
+}
+
+/**
+ * Dynamic array push method for channel
+ */
+void pushChannel(struct Client *cl, struct Channel channel)
+{
+    if (cl->channel_count > cl->channel_capacity)
+    {
+        // Re allocating memory with channel's size
+        int *response = realloc(cl->channels, sizeof(struct Channel) * cl->channel_count);
+        cl->channel_capacity = sizeof(struct Channel) * cl->channel_count;
+    }
+
+    cl->channels[cl->channel_count] = channel;
+    cl->channel_count += 1;
+}
+
 /**
  * Client command check
  * Return:
@@ -54,27 +103,89 @@ void signal_callback_handler(int signum)
  *  2 : Break the loop
  *   
  */
-int checkClientCommand(struct Client cl, char *buffer, char *error_message)
+int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
 {
     // Setting error message all zeros
     memset(error_message, 0, MAX_BUFFER);
     if (strncmp("BYE", buffer, 3) == 0) // BYE command
     {
-        close(cl.client_id);
+        free(cl->channels);
+        free(cl);
+        close(cl->client_id);
         return 1;
     }
     else if (strncmp("SUB", buffer, 3) == 0) // SUB command
     {
         char *value;
-        value = strtok(buffer, " "); 
+        value = strtok(buffer, " ");
         value = strtok(NULL, " ");
         int channel_id = atoi(value);
-        if( channel_id > 0 && channel_id < 256){
-            memset(buffer, 0, MAX_BUFFER);
-            sprintf(buffer, "Subscribed  to  channel %d.\n", channel_id);
-            return 1;
-        }else{
-            sprintf(error_message, "Invalid  channel: %d.\n", channel_id);
+        if (channel_id >= 0 && channel_id < 256)
+        {
+            int index = checkClientInChannel(cl, channel_id);
+            if (index > -1)
+            {
+                if (cl->channels[index].is_subscribed == false)
+                {
+                    memset(buffer, 0, MAX_BUFFER);
+                    sprintf(buffer, "Subscribed to channel %d.\n", cl->channels[index].channel_id);
+                    cl->channels[index].is_subscribed = true;
+                    return 1;
+                }
+                else
+                {
+                    sprintf(error_message, "Already subscribed to channel %d.\n", channel_id);
+                    return -1;
+                }
+            }
+            else
+            {
+                pushChannel(cl, channels[channel_id]);
+                memset(buffer, 0, MAX_BUFFER);
+                sprintf(buffer, "Subscribed to channel %d.\n", cl->channels[cl->channel_count - 1].channel_id);
+                cl->channels[cl->channel_count - 1].is_subscribed = true;
+                return 1;
+            }
+        }
+        else
+        {
+            sprintf(error_message, "Invalid channel: %d.\n", channel_id);
+            return -1;
+        }
+    }
+    else if (strncmp("UNSUB", buffer, 5) == 0) // UNSUB command
+    {
+        char *value;
+        value = strtok(buffer, " ");
+        value = strtok(NULL, " ");
+        int channel_id = atoi(value);
+        if (channel_id >= 0 && channel_id < 256)
+        {
+            int index = checkClientInChannel(cl, channel_id);
+            if (index == -1)
+            {
+                sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
+                return -1;
+            }
+            else
+            {
+                if (cl->channels[index].is_subscribed == false)
+                {
+                    sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
+                    return -1;
+                }
+                else
+                {
+                    cl->channels[index].is_subscribed = false;
+                    memset(buffer, 0, MAX_BUFFER);
+                    sprintf(buffer, "Unsubscribed from channel %d.\n", cl->channels[index].channel_id);
+                    return 1;
+                }
+            }
+        }
+        else
+        {
+            sprintf(error_message, "Invalid channel: %d.\n", channel_id);
             return -1;
         }
     }
@@ -84,12 +195,12 @@ int checkClientCommand(struct Client cl, char *buffer, char *error_message)
  * Chat function
  * Will handle the client communication 
 */
-void chat(struct Client cl)
+void chat(struct Client *cl)
 {
     char buff[MAX_BUFFER];
     char error_message[MAX_BUFFER];
     int n;
-    int socket_client = cl.client_id;
+    int socket_client = cl->client_id;
 
     // Sending the welcome message to client
     memset(buff, 0, MAX_BUFFER);
@@ -194,13 +305,23 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
+    // Initialising channels with no messages
+    for (int counter = 0; counter < 256; counter++)
+    {
+        channels[counter].channel_id = counter;
+        channels[counter].messages = NULL;
+        channels[counter].is_subscribed = false;
+    }
+
     // Setting new client
     struct Client cl = {
         socket_client,
-        0b00000000};
+        malloc(sizeof(struct Channel)), // Allocating initial memory to have 1 channel
+        1,
+        0};
 
     // Function for chatting between client and server
-    chat(cl);
+    chat(&cl);
 
     // After chatting closing the socket
     close(socket_server);

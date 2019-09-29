@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <stdbool.h>
 
 #define MAX_BUFFER 255
 #define SOCKET_ADDRESS struct sockaddr
@@ -66,17 +67,18 @@ void chat()
       
         if (strncmp("BYE", buff, 3) == 0)
         {
-            printf("\nDisconnecting client from server.\n");
+            printf("Disconnecting client from server.\n");
             close(socket_client);
 
             printf("Client disconnected.\n");
             exit(0);
         }
+
         write(socket_server, buff, sizeof(buff));
 
         // Setting the buffer all zeros
         memset(buff, 0, sizeof(buff));
-        
+
         // Reading from server
         read(socket_server, buff, sizeof(buff));
         printf("%s", buff);
