@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <sys/time.h>
 
 #define MAX_BUFFER 255
 #define DEFAULT_PORT 12345
@@ -29,8 +30,9 @@
 // Stuctures
 struct Message
 {
-    int message_id;
+    char *message;
     int sender_id;
+    long int time;
     int *read_by;
 };
 
@@ -39,12 +41,14 @@ struct Channel
     int channel_id;
     struct Message *messages;
     bool is_subscribed;
+    int message_count;
+    int message_capacity;
 };
 
 struct Client
 {
     int client_id;
-    struct Channel *channels;
+    struct Channel **channels;
     int channel_count;
     int channel_capacity;
 };
@@ -70,7 +74,7 @@ int checkClientInChannel(struct Client *cl, int channel_id)
 {
     for (int counter = 0; counter < cl->channel_count; counter++)
     {
-        if (cl->channels[counter].channel_id == channel_id)
+        if (cl->channels[counter]->channel_id == channel_id)
         {
             return counter;
         }
@@ -81,7 +85,7 @@ int checkClientInChannel(struct Client *cl, int channel_id)
 /**
  * Dynamic array push method for channel
  */
-void pushChannel(struct Client *cl, struct Channel channel)
+void pushChannel(struct Client *cl, int channel_id)
 {
     if (cl->channel_count > cl->channel_capacity)
     {
@@ -90,9 +94,154 @@ void pushChannel(struct Client *cl, struct Channel channel)
         cl->channel_capacity = sizeof(struct Channel) * cl->channel_count;
     }
 
-    cl->channels[cl->channel_count] = channel;
+    cl->channels[cl->channel_count] = &channels[channel_id];
     cl->channel_count += 1;
 }
+
+
+/**
+ * Subscribe client to channel function
+ */
+int subClientToChannel(struct Client *cl, char *buffer, char *error_message)
+{
+    char *value;
+    value = strtok(buffer, " ");
+    value = strtok(NULL, " ");
+    int channel_id = atoi(value);
+    if (channel_id >= 0 && channel_id < 256)
+    {
+        int index = checkClientInChannel(cl, channel_id);
+        if (index > -1)
+        {
+            if (cl->channels[index]->is_subscribed == false)
+            {
+                memset(buffer, 0, MAX_BUFFER);
+                sprintf(buffer, "Subscribed to channel %d.\n", cl->channels[index]->channel_id);
+                cl->channels[index]->is_subscribed = true;
+                return 1;
+            }
+            else
+            {
+                sprintf(error_message, "Already subscribed to channel %d.\n", channel_id);
+                return -1;
+            }
+        }
+        else
+        {
+            pushChannel(cl, channel_id);
+            memset(buffer, 0, MAX_BUFFER);
+            sprintf(buffer, "Subscribed to channel %d.\n", cl->channels[cl->channel_count - 1]->channel_id);
+            cl->channels[cl->channel_count - 1]->is_subscribed = true;
+            return 1;
+        }
+    }
+    else
+    {
+        sprintf(error_message, "Invalid channel: %d.\n", channel_id);
+        return -1;
+    }
+}
+
+/**
+ * Unsubscribe client to channel function
+ */
+int unsubClientToChannel(struct Client *cl, char *buffer, char *error_message)
+{
+    char *value;
+    value = strtok(buffer, " ");
+    value = strtok(NULL, " ");
+    int channel_id = atoi(value);
+    if (channel_id >= 0 && channel_id < 256)
+    {
+        int index = checkClientInChannel(cl, channel_id);
+        if (index == -1)
+        {
+            sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
+            return -1;
+        }
+        else
+        {
+            if (cl->channels[index]->is_subscribed == false)
+            {
+                sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
+                return -1;
+            }
+            else
+            {
+                cl->channels[index]->is_subscribed = false;
+                memset(buffer, 0, MAX_BUFFER);
+                sprintf(buffer, "Unsubscribed from channel %d.\n", cl->channels[index]->channel_id);
+                return 1;
+            }
+        }
+    }
+    else
+    {
+        sprintf(error_message, "Invalid channel: %d.\n", channel_id);
+        return -1;
+    }
+}
+
+
+/**
+ * Send message to the channel function
+ */
+int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
+{
+    char *value, *response;
+    value = strtok(buffer, " ");
+    value = strtok(NULL, " ");
+    response = strtok(NULL, " ");
+    int channel_id = atoi(value);
+    if (channel_id >= 0 && channel_id < 256)
+    {
+        int index = checkClientInChannel(cl, channel_id);
+        if (index == -1)
+        {
+            sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
+            return -1;
+        }
+        else
+        {
+            if (cl->channels[index]->is_subscribed == false)
+            {
+                sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
+                return -1;
+            }
+            else
+            {
+               
+                memset(buffer, 0, MAX_BUFFER);
+                channels[channel_id].message_count += 5;
+
+                sprintf(buffer, "Message %s %d %d.\n", response, channels[channel_id].message_count, cl->channels[channel_id]->message_count );
+                return 1;
+                // if (channels[index].message_count > channels[index].message_capacity)
+                // {
+                //     // Re allocating memory with channel's size
+                //     int *response = realloc(channels->messages, sizeof(struct Message) * channels->message_count);
+                //     channels->message_capacity = sizeof(struct Message) * channels->message_count;
+                // }
+
+                // channels[index].messages[channels->message_count].message = value;
+                // channels[index].messages[channels->message_count].time = time(NULL);
+                // channels[index].message_count += 1; 
+
+                // cl->channels[index].is_subscribed = false;
+                // memset(buffer, 0, MAX_BUFFER);
+                // sprintf(buffer, "Unsubscribed from channel %d.\n", cl->channels[index].channel_id);
+                // return 1;
+
+            }
+        }
+    }
+    else
+    {
+        sprintf(error_message, "Invalid channel: %d.\n", channel_id);
+        return -1;
+    }
+}
+
 
 /**
  * Client command check
@@ -116,78 +265,15 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("SUB", buffer, 3) == 0) // SUB command
     {
-        char *value;
-        value = strtok(buffer, " ");
-        value = strtok(NULL, " ");
-        int channel_id = atoi(value);
-        if (channel_id >= 0 && channel_id < 256)
-        {
-            int index = checkClientInChannel(cl, channel_id);
-            if (index > -1)
-            {
-                if (cl->channels[index].is_subscribed == false)
-                {
-                    memset(buffer, 0, MAX_BUFFER);
-                    sprintf(buffer, "Subscribed to channel %d.\n", cl->channels[index].channel_id);
-                    cl->channels[index].is_subscribed = true;
-                    return 1;
-                }
-                else
-                {
-                    sprintf(error_message, "Already subscribed to channel %d.\n", channel_id);
-                    return -1;
-                }
-            }
-            else
-            {
-                pushChannel(cl, channels[channel_id]);
-                memset(buffer, 0, MAX_BUFFER);
-                sprintf(buffer, "Subscribed to channel %d.\n", cl->channels[cl->channel_count - 1].channel_id);
-                cl->channels[cl->channel_count - 1].is_subscribed = true;
-                return 1;
-            }
-        }
-        else
-        {
-            sprintf(error_message, "Invalid channel: %d.\n", channel_id);
-            return -1;
-        }
+        return subClientToChannel(cl, buffer, error_message);
     }
     else if (strncmp("UNSUB", buffer, 5) == 0) // UNSUB command
     {
-        char *value;
-        value = strtok(buffer, " ");
-        value = strtok(NULL, " ");
-        int channel_id = atoi(value);
-        if (channel_id >= 0 && channel_id < 256)
-        {
-            int index = checkClientInChannel(cl, channel_id);
-            if (index == -1)
-            {
-                sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
-                return -1;
-            }
-            else
-            {
-                if (cl->channels[index].is_subscribed == false)
-                {
-                    sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
-                    return -1;
-                }
-                else
-                {
-                    cl->channels[index].is_subscribed = false;
-                    memset(buffer, 0, MAX_BUFFER);
-                    sprintf(buffer, "Unsubscribed from channel %d.\n", cl->channels[index].channel_id);
-                    return 1;
-                }
-            }
-        }
-        else
-        {
-            sprintf(error_message, "Invalid channel: %d.\n", channel_id);
-            return -1;
-        }
+        return unsubClientToChannel(cl, buffer, error_message);
+    }
+    else if (strncmp("SEND", buffer, 4) == 0) // SEND command
+    {
+        return sendMessageToChannel(cl, buffer, error_message);
     }
 }
 
@@ -243,6 +329,7 @@ void chat(struct Client *cl)
 
         // Write to client
         write(socket_client, buff, sizeof(buff));
+
 
         // Detect SIGINT
         signal(SIGINT, signal_callback_handler);
@@ -309,8 +396,10 @@ int main(int argc, char *argv[])
     for (int counter = 0; counter < 256; counter++)
     {
         channels[counter].channel_id = counter;
-        channels[counter].messages = NULL;
+        channels[counter].messages = malloc(sizeof(struct Message));
         channels[counter].is_subscribed = false;
+        channels[counter].message_count = 1;
+        channels[counter].message_capacity = 0;
     }
 
     // Setting new client

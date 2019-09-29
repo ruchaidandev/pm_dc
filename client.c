@@ -33,7 +33,8 @@ int socket_server, socket_client;
  */
 void signal_callback_handler(int signum)
 {
-    printf("\nDisconnecting client from server.\n");
+    write(socket_server, "BYE", 3);
+    printf("Disconnecting client from server.\n");
     close(socket_client);
 
     printf("Client disconnected.\n");
@@ -67,6 +68,7 @@ void chat()
       
         if (strncmp("BYE", buff, 3) == 0)
         {
+            write(socket_server, buff, sizeof(buff));
             printf("Disconnecting client from server.\n");
             close(socket_client);
 
