@@ -31,7 +31,7 @@ int socket_server, socket_client;
 /**
  * Exit function 
  */
-void signal_callback_handler(int signum)
+void signalCallbackHandler(int signum)
 {
     write(socket_server, "BYE", 3);
     printf("Disconnecting client from server.\n");
@@ -86,7 +86,7 @@ void chat()
         printf("%s", buff);
 
         // Detect SIGINT
-        signal(SIGINT, signal_callback_handler);
+        signal(SIGINT, signalCallbackHandler);
     }
 }
 
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
     }
 
     // Detect SIGINT
-    signal(SIGINT, signal_callback_handler);
+    signal(SIGINT, signalCallbackHandler);
 
     // Function for chatting between client and server
     chat();

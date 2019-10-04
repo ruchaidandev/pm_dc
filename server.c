@@ -39,7 +39,7 @@ struct Message
 struct Channel
 {
     int channel_id;
-    struct Message *messages;
+    struct Message **messages;
     bool is_subscribed;
     int message_count;
     int message_capacity;
@@ -48,6 +48,7 @@ struct Channel
 struct Client
 {
     int client_id;
+    int client_code;
     struct Channel **channels;
     int channel_count;
     int channel_capacity;
@@ -55,12 +56,13 @@ struct Client
 
 // Global variables
 int socket_server;
+int client_unique_id = 1;
 struct Channel channels[256];
 
 /**
  * Exit function 
  */
-void signal_callback_handler(int signum)
+void signalCallbackHandler(int signum)
 {
     printf("Closing server.\n");
     close(socket_server);
@@ -70,8 +72,48 @@ void signal_callback_handler(int signum)
     exit(signum);
 }
 
+/**
+ * Initialises the Client
+ * Assigns all new structures with channels
+ */ 
+struct Client initialiseClient(){
+    int len, socket_client;
+    struct sockaddr_in cli;
+    // Listening to new clients
+    if ((listen(socket_server, MAX_CLIENT_QUEUE)) != 0)
+    {
+        printf("Server Error: Server listening failed\n");
+        exit(-1);
+    }
+
+    len = sizeof(cli);
+
+    // Accepting new clients
+    socket_client = accept(socket_server, (SOCKET_ADDRESS *)&cli, &len);
+    if (socket_client < 0)
+    {
+        printf("Server Error: Server accepting failed.\n");
+        exit(-1);
+    }
+
+
+    // Setting new client
+    struct Client cl = {
+        socket_client,
+        client_unique_id++,
+        malloc(sizeof(struct Channel)), // Allocating initial memory to have 1 channel
+        0,
+        -1};
+    // returns the client structure
+    return cl;
+}
+
+/**
+ * Check the Client in the given channel
+ */
 int checkClientInChannel(struct Client *cl, int channel_id)
 {
+    
     for (int counter = 0; counter < cl->channel_count; counter++)
     {
         if (cl->channels[counter]->channel_id == channel_id)
@@ -108,11 +150,13 @@ int subClientToChannel(struct Client *cl, char *buffer, char *error_message)
     value = strtok(buffer, " ");
     value = strtok(NULL, " ");
     int channel_id = atoi(value);
+    
     if (channel_id >= 0 && channel_id < 256)
     {
         int index = checkClientInChannel(cl, channel_id);
         if (index > -1)
         {
+            
             if (cl->channels[index]->is_subscribed == false)
             {
                 memset(buffer, 0, MAX_BUFFER);
@@ -258,10 +302,8 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     memset(error_message, 0, MAX_BUFFER);
     if (strncmp("BYE", buffer, 3) == 0) // BYE command
     {
-        free(cl->channels);
-        free(cl);
         close(cl->client_id);
-        return 1;
+        return 3;
     }
     else if (strncmp("SUB", buffer, 3) == 0) // SUB command
     {
@@ -273,7 +315,7 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("SEND", buffer, 4) == 0) // SEND command
     {
-        return sendMessageToChannel(cl, buffer, error_message);
+        //return sendMessageToChannel(cl, buffer, error_message);
     }
 }
 
@@ -290,7 +332,7 @@ void chat(struct Client *cl)
 
     // Sending the welcome message to client
     memset(buff, 0, MAX_BUFFER);
-    sprintf(buff, "Welcome! Your client ID is %d.\n", socket_client);
+    sprintf(buff, "Welcome! Your client ID is %d.\n", cl->client_code);
     write(socket_client, buff, sizeof(buff));
 
     // Looping till the server exits
@@ -313,6 +355,14 @@ void chat(struct Client *cl)
         {
             break;
         }
+        else if(response == 3)
+        {
+            *cl = initialiseClient();
+            memset(buff, 0, MAX_BUFFER);
+            sprintf(buff, "Welcome! Your client ID is %d.\n", cl->client_code);
+            write(cl->client_id, buff, sizeof(buff));
+            continue;
+        }
         else if (response == -1)
         {
             // Write to client
@@ -332,7 +382,7 @@ void chat(struct Client *cl)
 
 
         // Detect SIGINT
-        signal(SIGINT, signal_callback_handler);
+        signal(SIGINT, signalCallbackHandler);
     }
 }
 
@@ -373,26 +423,9 @@ int main(int argc, char *argv[])
     }
 
     // Detect SIGINT
-    signal(SIGINT, signal_callback_handler);
+    signal(SIGINT, signalCallbackHandler);
 
-    // Listening to new clients
-    if ((listen(socket_server, MAX_CLIENT_QUEUE)) != 0)
-    {
-        printf("Server Error: Server listening failed\n");
-        exit(-1);
-    }
-
-    len = sizeof(cli);
-
-    // Accepting new clients
-    socket_client = accept(socket_server, (SOCKET_ADDRESS *)&cli, &len);
-    if (socket_client < 0)
-    {
-        printf("Server Error: Server accepting failed.\n");
-        exit(-1);
-    }
-
-    // Initialising channels with no messages
+     // Initialising channels with no messages
     for (int counter = 0; counter < 256; counter++)
     {
         channels[counter].channel_id = counter;
@@ -402,13 +435,9 @@ int main(int argc, char *argv[])
         channels[counter].message_capacity = 0;
     }
 
-    // Setting new client
-    struct Client cl = {
-        socket_client,
-        malloc(sizeof(struct Channel)), // Allocating initial memory to have 1 channel
-        1,
-        0};
-
+    // Initialise new client
+    struct Client cl = initialiseClient();
+    
     // Function for chatting between client and server
     chat(&cl);
 
