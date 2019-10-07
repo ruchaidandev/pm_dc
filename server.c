@@ -8,55 +8,7 @@
 *
 */
 
-// Includes
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <signal.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <time.h>
-
-#define MAX_BUFFER 255
-#define DEFAULT_PORT 12345
-#define MAX_CLIENT_QUEUE 5
-#define SOCKET_ADDRESS struct sockaddr
-
-// Stuctures
-typedef struct message
-{
-    char *content;
-    int sender_id;
-    long int time;
-    int *read_by;
-} Message;
-
-struct Channel
-{
-    int channel_id;
-    Message **messages;
-    int message_count;
-    int message_capacity;
-};
-
-struct Client
-{
-    int client_id;
-    int client_code;
-    int subscribed_channels[256];
-    int subscribed_time[256];
-};
-
-// Global variables
-int socket_server;
-int client_unique_id = 1;
-struct Channel channels[256];
-char **loop_buffer;
+#include "server.h"
 
 /**
  * Exit function 
@@ -100,9 +52,9 @@ struct Client initialiseClient()
     struct Client cl = {
         socket_client,
         client_unique_id++,
-        {0}, // Allocating zeros 
+        {0}, // Allocating zeros
         {0},
-        };
+    };
     // returns the client structure
     return cl;
 }
@@ -136,13 +88,13 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
     int message_index = channels[channel_id].message_count;
     Message msg = {
         message_from_client, // message
-        cl->client_code, // sender
-        time(NULL), // time
-        0 // read by
+        cl->client_code,     // sender
+        time(NULL),          // time
+        0                    // read by
     };
     channels[channel_id].messages[message_index] = &msg;
     channels[channel_id].message_count += 1;
-} 
+}
 
 /**
  * Subscribe client to channel function
@@ -223,12 +175,12 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
     int channel_id = atoi(value);
     // Message
     value = strtok(NULL, " ");
-    while(value != NULL){
+    while (value != NULL)
+    {
         strcat(message_from_client, value);
         strcat(message_from_client, " ");
         value = strtok(NULL, " ");
     }
-    
 
     if (channel_id >= 0 && channel_id < 256)
     {
@@ -241,11 +193,14 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
         else
         {
             // Check message in range from 0 to 1024
-            if(strlen(message_from_client) > 0 && strlen(message_from_client) <= 1024 ){
+            if (strlen(message_from_client) > 0 && strlen(message_from_client) <= 1024)
+            {
                 pushMessageToChannel(cl, channel_id, message_from_client);
                 memset(buffer, 0, MAX_BUFFER);
                 return 1;
-            }else{
+            }
+            else
+            {
                 sprintf(error_message, "Error: message can not be empty or greater than 1024 characters.\n");
                 return -1;
             }
@@ -261,18 +216,30 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
 /**
  * Display the channel list with tab delimeter
  */
-int displayChannelList(struct Client *cl, char loop_buffer[256][MAX_BUFFER]){
-    int loop_counter = 0; // Counts the loop buffer 
-    for(int counter = 0; counter < 256; counter++){
-        if(cl->subscribed_channels[counter] == 1){
-            char buff[MAX_BUFFER];
-            memset(buff, 0, MAX_BUFFER);
-            sprintf(buff, "%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
-            strncpy(loop_buffer[loop_counter], buff, strlen(buff) + 1);
+int displayChannelList(struct Client *cl, char loop_buffer[256][MAX_BUFFER])
+{
+    int loop_counter = 0; // Counts the loop buffer
+    char buff[MAX_BUFFER];
+    for (int counter = 0; counter < 256; counter++)
+    {
+        if (cl->subscribed_channels[counter] == 1)
+        {
+            memset(loop_buffer[loop_counter], 0, MAX_BUFFER);
+            sprintf(loop_buffer[loop_counter], "%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
+            loop_counter += 1;
         }
     }
+    // Passing the array length to the client
+    // memset(buff, 0, MAX_BUFFER);
+    // sprintf(buff, "LOOP_%d", loop_counter);
+    // write(cl->client_id, buff, sizeof(buff));
+    // //send(cl->client_id, &loop_counter, sizeof(loop_counter), 0);
+
+    // // Sending array data to the client
+    // send(cl->client_id, loop_buffer, sizeof(buff) * loop_counter, 0);
+
     return loop_counter;
-} 
+}
 
 /**printf("%s\n",response);
  * Client command check
@@ -308,12 +275,20 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("CHANNELS", buffer, 8) == 0) // CHANNELS command
     {
+        memset(buffer, 0, MAX_BUFFER);
         char loop_buffer[256][MAX_BUFFER] = {{0}};
         int total = displayChannelList(cl, loop_buffer);
-        for(int counter =0; counter < total; counter++){
-            write(cl->client_id, loop_buffer[counter], sizeof(loop_buffer[counter]));
+
+        sprintf(buffer, "LOOP_%d", total); // Passing the loop size
+        write(cl->client_id, buffer, sizeof(buffer));
+
+        for (int counter = 0; counter < total; counter++)
+        {
+            write(cl->client_id, loop_buffer[counter], MAX_BUFFER);
+            printf("%s", loop_buffer[counter]);
         }
-        return 1;
+
+        return 4;
     }
     else
     {
@@ -368,8 +343,6 @@ void chat(struct Client *cl)
         }
         else if (response == 4)
         {
-            write(cl->client_id, loop_buffer, sizeof(loop_buffer));
-            
             continue;
         }
         else if (response == -1)

@@ -8,25 +8,7 @@
 *
 */
 
-// Includes
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <signal.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <stdbool.h>
-
-#define MAX_BUFFER 255
-#define SOCKET_ADDRESS struct sockaddr
-
-// Global variables
-int socket_server, socket_client;
+#include "client.h"
 
 /**
  * Exit function 
@@ -50,6 +32,7 @@ void chat()
 {
     char buff[MAX_BUFFER];
     int n;
+    char *value;
 
     memset(buff, 0, sizeof(buff));
     read(socket_server, buff, sizeof(buff));
@@ -77,13 +60,34 @@ void chat()
         }
 
         write(socket_server, buff, sizeof(buff));
-
+        
         // Setting the buffer all zeros
         memset(buff, 0, sizeof(buff));
 
         // Reading from server
         read(socket_server, buff, sizeof(buff));
-        printf("%s", buff);
+        
+        // Check receiving array 
+        if(strncmp("LOOP", buff, 4) == 0){
+            
+            value = strtok(buff, "_");
+            value = strtok(NULL, "_");
+            // Channel number
+            int loop_size = atoi(value);
+            for(int itr = 0; itr < loop_size; itr++ ){
+                printf("%d\n", itr);
+
+                memset(buff, 0, sizeof(buff)); 
+                read(socket_server, buff, sizeof(buff));
+
+                printf("%s", buff);
+            }
+        }else{
+            // Check whether a loop is transmitted
+            printf("%s", buff);
+            memset(buff, 0, sizeof(buff));     
+        }
+       
 
         // Detect SIGINT
         signal(SIGINT, signalCallbackHandler);
