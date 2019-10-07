@@ -56,6 +56,7 @@ struct Client
 int socket_server;
 int client_unique_id = 1;
 struct Channel channels[256];
+char **loop_buffer;
 
 /**
  * Exit function 
@@ -260,17 +261,17 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
 /**
  * Display the channel list with tab delimeter
  */
-int displayChannelList(struct Client *cl, char *buffer){
-    
+int displayChannelList(struct Client *cl, char loop_buffer[256][MAX_BUFFER]){
+    int loop_counter = 0; // Counts the loop buffer 
     for(int counter = 0; counter < 256; counter++){
         if(cl->subscribed_channels[counter] == 1){
-            sprintf(buffer, "%d\t%d\t%d\t%d \n", counter, channels[counter].message_count, 0, 0);
-            write(cl->client_id, buffer, sizeof(buffer));
-            memset(buffer, 0, MAX_BUFFER);
-
+            char buff[MAX_BUFFER];
+            memset(buff, 0, MAX_BUFFER);
+            sprintf(buff, "%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
+            strncpy(loop_buffer[loop_counter], buff, strlen(buff) + 1);
         }
     }
-    return 1;
+    return loop_counter;
 } 
 
 /**printf("%s\n",response);
@@ -307,7 +308,12 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("CHANNELS", buffer, 8) == 0) // CHANNELS command
     {
-        return displayChannelList(cl, buffer);
+        char loop_buffer[256][MAX_BUFFER] = {{0}};
+        int total = displayChannelList(cl, loop_buffer);
+        for(int counter =0; counter < total; counter++){
+            write(cl->client_id, loop_buffer[counter], sizeof(loop_buffer[counter]));
+        }
+        return 1;
     }
     else
     {
@@ -362,6 +368,8 @@ void chat(struct Client *cl)
         }
         else if (response == 4)
         {
+            write(cl->client_id, loop_buffer, sizeof(loop_buffer));
+            
             continue;
         }
         else if (response == -1)
