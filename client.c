@@ -65,7 +65,7 @@ void chat()
         // Getting input from the client
         while ((buff[n++] = getchar()) != '\n')
             ;
-      
+
         if (strncmp("BYE", buff, 3) == 0)
         {
             write(socket_server, buff, sizeof(buff));
@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
     {
         if (argv[1] != NULL && argv[2] != NULL)
         {
-           server = gethostbyname(argv[1]); 
+            server = gethostbyname(argv[1]);
             servaddr.sin_family = AF_INET;
             memcpy((char *)server->h_addr_list[0], (char *)&servaddr.sin_addr.s_addr, server->h_length);
             //servaddr.sin_addr.s_addr = gethostbyname(argv[1])->h_addr_list[0];
