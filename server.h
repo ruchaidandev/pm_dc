@@ -94,7 +94,7 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message);
 /**
  * Display the channel list with tab delimeter
  */
-int displayChannelList(struct Client *cl);
+int displayChannelList(struct Client *cl, char *buffer);
 
 /**
  * Client command check

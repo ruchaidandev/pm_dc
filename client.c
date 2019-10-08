@@ -24,6 +24,7 @@ void signalCallbackHandler(int signum)
     exit(signum);
 }
 
+
 /**
  * Chat function
  * Will handle the server communication 
@@ -33,6 +34,7 @@ void chat()
     char buff[MAX_BUFFER];
     int n;
     char *value;
+    char command[4];
     bool is_loop = false;
 
     memset(buff, 0, sizeof(buff));
@@ -72,18 +74,25 @@ void chat()
         // Reading from server
         read(socket_server, buff, MAX_BUFFER);
 
-        if(strncmp("LOOP", buff, 4) == 0){
-            is_loop = true;
+        value = strtok(buff, "||");
+        printf("V1 %s\n", value);
+        if (value != NULL)
+        {
+            if(strncmp("END", value, 3) == 0){
+                is_loop = false;
+                continue;
+            }else if(strncmp("LOOP", value, 4) == 0){
+                is_loop = true;
+                continue;
+            }else if(strncmp("LINE", value, 4) == 0 ){
+                printf("%s", value);
+                continue;
+            }else{
+                printf("%s", value);
+            }
         }
-
-        if(strncmp("END", buff, 3) == 0){
-            is_loop = false;
-        }
-
-        printf("%s T ", buff);
-
-        memset(buff, 0, MAX_BUFFER); 
-
+        
+        
 
         // Detect SIGINT
         signal(SIGINT, signalCallbackHandler);

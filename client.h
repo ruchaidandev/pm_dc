@@ -24,7 +24,6 @@ int socket_server, socket_client;
 
 // Function definitions
 
-
 /**
  * Exit function 
  */
