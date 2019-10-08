@@ -216,19 +216,27 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
 /**
  * Display the channel list with tab delimeter
  */
-int displayChannelList(struct Client *cl, char loop_buffer[256][MAX_BUFFER])
+int displayChannelList(struct Client *cl)
 {
     int loop_counter = 0; // Counts the loop buffer
     char buff[MAX_BUFFER];
+    write(cl->client_id, "LOOP\n", 4);
+    printf("LOOP\n");
     for (int counter = 0; counter < 256; counter++)
     {
         if (cl->subscribed_channels[counter] == 1)
         {
-            memset(loop_buffer[loop_counter], 0, MAX_BUFFER);
-            sprintf(loop_buffer[loop_counter], "%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
+            memset(buff, 0, MAX_BUFFER);
+            sprintf(buff, "%d\t%d\t%d\t%d", counter, channels[counter].message_count, 0, 0);
+            printf("Size %d\n", strlen(buff));
+
+            write(cl->client_id, buff, MAX_BUFFER);
+            write(cl->client_id, "\n", 5);
+            printf("%s",buff);
             loop_counter += 1;
         }
     }
+    write(cl->client_id, "END\n", 3);
     // Passing the array length to the client
     // memset(buff, 0, MAX_BUFFER);
     // sprintf(buff, "LOOP_%d", loop_counter);
@@ -276,17 +284,14 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     else if (strncmp("CHANNELS", buffer, 8) == 0) // CHANNELS command
     {
         memset(buffer, 0, MAX_BUFFER);
-        char loop_buffer[256][MAX_BUFFER] = {{0}};
-        int total = displayChannelList(cl, loop_buffer);
+        //char loop_buffer[256][MAX_BUFFER] = {{0}};
+        int total = displayChannelList(cl);
 
-        sprintf(buffer, "LOOP_%d", total); // Passing the loop size
-        write(cl->client_id, buffer, sizeof(buffer));
-
-        for (int counter = 0; counter < total; counter++)
-        {
-            write(cl->client_id, loop_buffer[counter], MAX_BUFFER);
-            printf("%s", loop_buffer[counter]);
-        }
+        // for (int counter = 0; counter < total; counter++)
+        // {
+        //     send(cl->client_id, loop_buffer[counter], sizeof(loop_buffer[counter]), 0);
+        //     printf("%s", loop_buffer[counter]);
+        // }
 
         return 4;
     }

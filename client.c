@@ -33,6 +33,7 @@ void chat()
     char buff[MAX_BUFFER];
     int n;
     char *value;
+    bool is_loop = false;
 
     memset(buff, 0, sizeof(buff));
     read(socket_server, buff, sizeof(buff));
@@ -41,53 +42,48 @@ void chat()
     // Looping till the client exits
     for (;;)
     {
-        // Setting the buffer all zeros
-        memset(buff, 0, sizeof(buff));
+        
+        if(is_loop == false){
+            // Setting the buffer all zeros
+            memset(buff, 0, MAX_BUFFER);
 
-        n = 0;
-        // Getting input from the client
-        while ((buff[n++] = getchar()) != '\n')
-            ;
+            n = 0;
+            // Getting input from the client
+            printf("Getting Input: ");
+            while ((buff[n++] = getchar()) != '\n')
+                ;
 
-        if (strncmp("BYE", buff, 3) == 0)
-        {
+            if (strncmp("BYE", buff, 3) == 0)
+            {
+                write(socket_server, buff, sizeof(buff));
+                printf("Disconnecting client from server.\n");
+                close(socket_client);
+
+                printf("Client disconnected.\n");
+                exit(0);
+            }
+
             write(socket_server, buff, sizeof(buff));
-            printf("Disconnecting client from server.\n");
-            close(socket_client);
-
-            printf("Client disconnected.\n");
-            exit(0);
         }
 
-        write(socket_server, buff, sizeof(buff));
-        
         // Setting the buffer all zeros
-        memset(buff, 0, sizeof(buff));
+        memset(buff, 0, MAX_BUFFER);
 
         // Reading from server
-        read(socket_server, buff, sizeof(buff));
-        
-        // Check receiving array 
+        read(socket_server, buff, MAX_BUFFER);
+
         if(strncmp("LOOP", buff, 4) == 0){
-            
-            value = strtok(buff, "_");
-            value = strtok(NULL, "_");
-            // Channel number
-            int loop_size = atoi(value);
-            for(int itr = 0; itr < loop_size; itr++ ){
-                printf("%d\n", itr);
-
-                memset(buff, 0, sizeof(buff)); 
-                read(socket_server, buff, sizeof(buff));
-
-                printf("%s", buff);
-            }
-        }else{
-            // Check whether a loop is transmitted
-            printf("%s", buff);
-            memset(buff, 0, sizeof(buff));     
+            is_loop = true;
         }
-       
+
+        if(strncmp("END", buff, 3) == 0){
+            is_loop = false;
+        }
+
+        printf("%s T ", buff);
+
+        memset(buff, 0, MAX_BUFFER); 
+
 
         // Detect SIGINT
         signal(SIGINT, signalCallbackHandler);
