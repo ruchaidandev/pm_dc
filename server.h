@@ -1,3 +1,13 @@
+/*
+* Process Management and Distributed Computing
+* Queensland University of Technology
+* September 2019
+*
+* Server Implementation Header File
+* Ruchina Aidan Perera
+*
+*/
+
 #ifndef SERVER_H   
 #define SERVER_H
 
@@ -15,18 +25,28 @@
 #include <stdbool.h>
 #include <time.h>
 
-#define MAX_BUFFER 255
+#define MAX_BUFFER 1035
 #define DEFAULT_PORT 12345
 #define MAX_CLIENT_QUEUE 5
 #define SOCKET_ADDRESS struct sockaddr
 
 // Stuctures
+
+struct Client
+{
+    int client_id;
+    int client_code;
+    int subscribed_channels[256];
+    long int subscribed_time[256];
+    int subscribed_read_count[256];
+};
+
+
 typedef struct message
 {
     char *content;
     int sender_id;
     long int time;
-    int *read_by;
 } Message;
 
 struct Channel
@@ -37,13 +57,7 @@ struct Channel
     int message_capacity;
 };
 
-struct Client
-{
-    int client_id;
-    int client_code;
-    int subscribed_channels[256];
-    int subscribed_time[256];
-};
+
 
 // Global variables
 int socket_server;
@@ -53,7 +67,6 @@ char **loop_buffer;
 
 
 // Function definitions
-
 
 /**
  * Exit function 
@@ -95,6 +108,18 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message);
  * Display the channel list with tab delimeter
  */
 int displayChannelList(struct Client *cl, char *buffer);
+
+/**
+ * Get the next message of a given channel or get the next 
+ * message for any channel
+ */
+int getNextMessage(struct Client *cl, char *buffer, char *error_message);
+
+/**
+ * Get the live feed messages of a given channel or get the next 
+ * message for any channel
+ */
+int getLiveFeed(struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Client command check

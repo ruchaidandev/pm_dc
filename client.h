@@ -1,3 +1,13 @@
+/*
+* Process Management and Distributed Computing
+* Queensland University of Technology
+* September 2019
+*
+* Client Implementation Header File
+* Ruchina Aidan Perera
+*
+*/
+
 #ifndef CLIENT_H   
 #define CLIENT_H
 
@@ -14,7 +24,7 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 
-#define MAX_BUFFER 255
+#define MAX_BUFFER 1035
 #define SOCKET_ADDRESS struct sockaddr
 
 

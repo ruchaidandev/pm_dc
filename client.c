@@ -28,7 +28,7 @@ void signalCallbackHandler(int signum)
 /**
  * Chat function
  * Will handle the server communication 
-*/
+*/ 
 void chat()
 {
     char buff[MAX_BUFFER];
@@ -45,27 +45,27 @@ void chat()
     for (;;)
     {
         
-        if(is_loop == false){
-            // Setting the buffer all zeros
-            memset(buff, 0, MAX_BUFFER);
+    
+        // Setting the buffer all zeros
+        memset(buff, 0, MAX_BUFFER);
 
-            n = 0;
-            // Getting input from the client
-            while ((buff[n++] = getchar()) != '\n')
-                ;
+        n = 0;
+        // Getting input from the client
+        while ((buff[n++] = getchar()) != '\n')
+            ;
 
-            if (strncmp("BYE", buff, 3) == 0)
-            {
-                write(socket_server, buff, sizeof(buff));
-                printf("Disconnecting client from server.\n");
-                close(socket_client);
-
-                printf("Client disconnected.\n");
-                exit(0);
-            }
-
+        if (strncmp("BYE", buff, 3) == 0)
+        {
             write(socket_server, buff, sizeof(buff));
+            printf("Disconnecting client from server.\n");
+            close(socket_client);
+
+            printf("Client disconnected.\n");
+            exit(0);
         }
+
+        write(socket_server, buff, sizeof(buff));
+        
 
         // Setting the buffer all zeros
         memset(buff, 0, MAX_BUFFER);
