@@ -201,7 +201,7 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
             }
             else
             {
-                sprintf(error_message, "Error: message can not be empty or greater than 1024 characters.\n");
+                sprintf(error_message, "Message can not be empty or greater than 1024 characters.\n");
                 return -1;
             }
         }
@@ -225,7 +225,7 @@ int displayChannelList(struct Client *cl, char *buffer)
         if (cl->subscribed_channels[counter] == 1)
         {
             memset(buffer, 0, MAX_BUFFER);
-            sprintf(buffer, "LINE||%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
+            sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
             send(cl->client_id, buffer, strlen(buffer), 0);
             loop_counter += 1;
         }
@@ -270,9 +270,6 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("CHANNELS", buffer, 8) == 0) // CHANNELS command
     {
-        memset(buffer, 0, MAX_BUFFER);
-        sprintf(buffer, "LOOP||");
-        send(cl->client_id, buffer, 4, 0);
         
         memset(buffer, 0, MAX_BUFFER);
         int total = displayChannelList(cl, buffer);
@@ -280,7 +277,7 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else
     {
-        sprintf(error_message, "Error: Invalid command.\n");
+        sprintf(error_message, "Invalid command.\n");
         return -1;
     }
 }
@@ -314,6 +311,7 @@ void chat(struct Client *cl)
         int response = checkClientCommand(cl, buff, error_message);
         if (response == 1)
         {
+            // Write to client
             write(socket_client, buff, sizeof(buff));
             continue;
         }
@@ -323,6 +321,7 @@ void chat(struct Client *cl)
         }
         else if (response == 3)
         {
+            // Write to client
             *cl = initialiseClient();
             memset(buff, 0, MAX_BUFFER);
             sprintf(buff, "Welcome! Your client ID is %d.\n", cl->client_code);
@@ -331,9 +330,6 @@ void chat(struct Client *cl)
         }
         else if (response == 4)
         {
-            memset(buff, 0, MAX_BUFFER);
-            sprintf(buff, "END||");
-            write(cl->client_id, buff, 4);
             continue;
         }
         else if (response == -1)

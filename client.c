@@ -51,7 +51,6 @@ void chat()
 
             n = 0;
             // Getting input from the client
-            printf("Getting Input: ");
             while ((buff[n++] = getchar()) != '\n')
                 ;
 
@@ -74,25 +73,14 @@ void chat()
         // Reading from server
         read(socket_server, buff, MAX_BUFFER);
 
-        value = strtok(buff, "||");
-        printf("V1 %s\n", value);
-        if (value != NULL)
-        {
-            if(strncmp("END", value, 3) == 0){
-                is_loop = false;
-                continue;
-            }else if(strncmp("LOOP", value, 4) == 0){
-                is_loop = true;
-                continue;
-            }else if(strncmp("LINE", value, 4) == 0 ){
-                printf("%s", value);
-                continue;
-            }else{
-                printf("%s", value);
-            }
+
+        // Printing loop lines
+        value = strtok(buff, "|LL|");
+        while(value != NULL){
+            printf("%s", value);
+            value = strtok(NULL, "|LL|");
         }
-        
-        
+ 
 
         // Detect SIGINT
         signal(SIGINT, signalCallbackHandler);
