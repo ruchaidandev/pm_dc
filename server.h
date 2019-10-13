@@ -64,6 +64,8 @@ int socket_server;
 int client_unique_id = 1;
 struct Channel channels[256];
 char **loop_buffer;
+bool loop_breaker = false;
+bool is_inifite_loop = false;
 
 
 // Function definitions
@@ -72,6 +74,7 @@ char **loop_buffer;
  * Exit function 
  */
 void signalCallbackHandler(int signum);
+
 
 /**
  * Initialises the Client
@@ -107,7 +110,12 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message);
 /**
  * Display the channel list with tab delimeter
  */
-int displayChannelList(struct Client *cl, char *buffer);
+void displayChannelList(struct Client *cl, char *buffer);
+
+/**
+ * Get the next channel message for the given channel
+ */
+int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer);
 
 /**
  * Get the next message of a given channel or get the next 

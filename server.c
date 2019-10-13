@@ -15,12 +15,17 @@
  */
 void signalCallbackHandler(int signum)
 {
-    printf("Closing server.\n");
-    close(socket_server);
+    if(is_inifite_loop){
+        loop_breaker = true;
+    }else{
+        printf("Closing server.\n");
+        close(socket_server);
 
-    printf("Server closed.\n");
-    // Exit program
-    exit(signum);
+        printf("Server closed.\n");
+        // Exit program
+        exit(signum);
+    }
+    
 } 
 
 /**
@@ -95,7 +100,7 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
     msg->time = time(NULL);
     channels[channel_id].messages[message_index] = msg;
     channels[channel_id].message_count += 1;
-
+    cl->subscribed_read_count[channel_id] += 1;
 }
 
 
@@ -171,20 +176,14 @@ int unsubClientToChannel(struct Client *cl, char *buffer, char *error_message)
  */
 int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
 {
-    char *value, *message_from_client;
+    char *value;
     value = strtok(buffer, " ");
     value = strtok(NULL, " ");
     // Channel number
     int channel_id = atoi(value);
     // Message
-    value = strtok(NULL, " ");
-    while (value != NULL)
-    {
-        strcat(message_from_client, value);
-        strcat(message_from_client, " ");
-        value = strtok(NULL, " ");
-    }
-
+    value = strtok(NULL, "");
+       
     if (channel_id >= 0 && channel_id < 256)
     {
         int index = checkClientInChannel(cl, channel_id);
@@ -196,10 +195,10 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
         else
         {
             // Check message in range from 0 to 1024
-            // 1027 is to avoid the \n \0 trailing in the message.
-            if (strlen(message_from_client) > 0 && strlen(message_from_client) <= 1027)
+            // 1026 is to avoid the \n \0 trailing in the message.
+            if (strlen(value) > 0 && strlen(value) < 1026)
             {
-                pushMessageToChannel(cl, channel_id, message_from_client);
+                pushMessageToChannel(cl, channel_id, value);
                 memset(buffer, 0, MAX_BUFFER);
                 return 1;
             }
@@ -220,49 +219,51 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
 /**
  * Display the channel list with tab delimeter
  */
-int displayChannelList(struct Client *cl, char *buffer)
+void displayChannelList(struct Client *cl, char *buffer)
 {
-    int loop_counter = 0; // Counts the loop buffer
-   
     for (int counter = 0; counter < 256; counter++)
     {
         if (cl->subscribed_channels[counter] == 1)
         {
+            int message_count_after_subscribed = 0;
+             for(int itr = 0; itr < channels[counter].message_count; itr++){
+                // Checks the time of subscribed
+                // Counts the total messages client did not read
+                if(channels[counter].messages[itr]->time > cl->subscribed_time[counter]){
+                    message_count_after_subscribed += 1; 
+                }
+            }
             memset(buffer, 0, MAX_BUFFER);
-            sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
-            send(cl->client_id, buffer, strlen(buffer), 0);
-            loop_counter += 1;
-        }
+            sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 
+            cl->subscribed_read_count[counter], 
+            message_count_after_subscribed - cl->subscribed_read_count[counter]);
+            write(cl->client_id, buffer, strlen(buffer));
+          }
     }
-
-    // write(cl->client_id, buff, strlen(buff));
-  
-    return loop_counter;
 }
 
 
 /**
- * Display the channel list with tab delimeter
-//  */
-// char sortMessagesByDate(int channel_id, bool order_type)
-// {
-//     int loop_counter = 0; // Counts the loop buffer
-   
-//     for (int counter = 0; counter < 256; counter++)
-//     {
-//         if (cl->subscribed_channels[counter] == 1)
-//         {
-//             memset(buffer, 0, MAX_BUFFER);
-//             sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count, 0, 0);
-//             send(cl->client_id, buffer, strlen(buffer), 0);
-//             loop_counter += 1;
-//         }
-//     }
-
-//     // write(cl->client_id, buff, strlen(buff));
-  
-//     return loop_counter;
-// }
+ * Get the next channel message for the given channel
+ */
+int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer)
+{
+    // For all messages in the channel
+    for(int itr = 0; itr < channels[channel_id].message_count; itr++){
+        // Checks the time of subscribed
+        if(channels[channel_id].messages[itr]->time > cl->subscribed_time[channel_id]){
+            for(int read_itr = cl->subscribed_read_count[channel_id]; 
+            read_itr < channels[channel_id].message_count; read_itr++){
+                cl->subscribed_read_count[channel_id] += 1;
+                memset(buffer, 0, MAX_BUFFER);
+                sprintf(buffer,"|LL|%s", channels[channel_id].messages[read_itr]->content);
+                write(cl->client_id, buffer, strlen(buffer));
+                return 1;
+            }
+        }
+    }
+    return 4;
+}
 
 
 /**
@@ -292,23 +293,8 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             else
             {
                 // For all messages in the channel
-                for(int itr = 0; itr < channels[channel_id].message_count; itr++){
-                    // Checks the time of subscribed
-                    //if(channels[channel_id].messages[itr]->time > cl->subscribed_time[channel_id]){
-                        
-                        for(int read_itr = cl->subscribed_read_count[channel_id]; 
-                        read_itr < channels[channel_id].message_count; read_itr++){
-
-                            cl->subscribed_read_count[channel_id] += 1;
-                            memset(buffer, 0, MAX_BUFFER);
-                            sprintf(buffer,"%s\n", channels[channel_id].messages[read_itr]->content);
-                            return 1;
-                        }
-                        
-                   // }
-                    
-                }
-                // Continue the loop as there are no messages
+                getNextChannelMessage(cl, channel_id, buffer);
+                memset(buffer, 0, MAX_BUFFER);
                 return 4;
             }
         }
@@ -328,29 +314,42 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
-    value = strtok(NULL, " ");
-    int channel_id = atoi(value);
-    if (channel_id >= 0 && channel_id < 256)
-    {
-        int index = checkClientInChannel(cl, channel_id);
-        if (index < 1)
+
+    // When no channel is provided
+    if(value == NULL){
+ 
+    }else{
+        // When a channel is id provided
+        value = strtok(NULL, " ");
+        int channel_id = atoi(value);
+        if (channel_id >= 0 && channel_id < 256)
         {
-            sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
-            return -1;
+            int index = checkClientInChannel(cl, channel_id);
+            if (index < 1)
+            {
+                sprintf(error_message, "Not subscribed to channel %d.\n", channel_id);
+                return -1;
+            }
+            else
+            {
+                // Enabbling the SIGINT for the loop
+                is_inifite_loop = true;
+                // For all messages in the channel
+                while(true){
+                    if(loop_breaker){
+                        break;
+                    }
+                    getNextChannelMessage(cl, channel_id, buffer);
+                }
+                memset(buffer, 0, MAX_BUFFER);
+                return 4;
+            }
         }
         else
         {
-            // cl->subscribed_channels[channel_id] = 0;
-            // cl->subscribed_time[channel_id] = 0;
-            // memset(buffer, 0, MAX_BUFFER);
-            // sprintf(buffer, "Unsubscribed from channel %d.\n", channel_id);
-            return 1;
+            sprintf(error_message, "Invalid channel: %d.\n", channel_id);
+            return -1;
         }
-    }
-    else
-    {
-        sprintf(error_message, "Invalid channel: %d.\n", channel_id);
-        return -1;
     }
 }
 
@@ -389,14 +388,12 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("CHANNELS", buffer, 8) == 0) // CHANNELS command
     {
-        
+        displayChannelList(cl, buffer);
         memset(buffer, 0, MAX_BUFFER);
-        int total = displayChannelList(cl, buffer);
         return 4;
     }
     else if (strncmp("NEXT", buffer, 4) == 0) // SEND command
     {
-        
         return getNextMessage(cl, buffer, error_message);
     }
     else if (strncmp("LIVEFEED", buffer, 4) == 0) // SEND command
