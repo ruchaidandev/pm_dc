@@ -15,20 +15,28 @@
  */
 void signalCallbackHandler(int signum)
 {
-    write(socket_server, "BYE", 3);
-    printf("Disconnecting client from server.\n");
-    close(socket_client);
+    if (is_inifite_loop)
+    {
+        write(socket_server, "BREAK\n", 5);
+        printf("\n");
+        is_inifite_loop = false;
+    }
+    else
+    {
+        write(socket_server, "BYE", 3); // Sending the server the exit message
+        printf("\nDisconnecting client from server.\n");
+        close(socket_client);
 
-    printf("Client disconnected.\n");
-    // Exit program
-    exit(signum);
+        printf("Client disconnected.\n");
+        // Exit program
+        exit(signum);
+    }
 }
-
 
 /**
  * Chat function
  * Will handle the server communication 
-*/ 
+*/
 void chat()
 {
     char buff[MAX_BUFFER];
@@ -44,17 +52,21 @@ void chat()
     // Looping till the client exits
     for (;;)
     {
-        
-    
+     
         // Setting the buffer all zeros
         memset(buff, 0, MAX_BUFFER);
 
-        n = 0;
-        // Getting input from the client
-        while ((buff[n++] = getchar()) != '\n')
-            ;
+        // Disabling the input for the livefeed
+        if (is_inifite_loop == false)
+        {
+            printf("Heree\n");
+            n = 0;
+            // Getting input from the client
+            while ((buff[n++] = getchar()) != '\n')
+                ;
+        }
 
-        if (strncmp("BYE", buff, 3) == 0)
+        if (strncmp("BYE", buff, 3) == 0) // BYE Command
         {
             write(socket_server, buff, sizeof(buff));
             printf("Disconnecting client from server.\n");
@@ -63,9 +75,12 @@ void chat()
             printf("Client disconnected.\n");
             exit(0);
         }
+        else if (strncmp("LIVEFEED", buff, 8) == 0) // LIVEFEED Command
+        {
+            is_inifite_loop = true;
+        }
 
         write(socket_server, buff, sizeof(buff));
-        
 
         // Setting the buffer all zeros
         memset(buff, 0, MAX_BUFFER);
@@ -73,17 +88,17 @@ void chat()
         // Reading from server
         read(socket_server, buff, MAX_BUFFER);
 
-
         // Printing loop lines
         value = strtok(buff, "|LL|");
-        while(value != NULL){
+        while (value != NULL)
+        {
             printf("%s", value);
             value = strtok(NULL, "|LL|");
         }
- 
 
         // Detect SIGINT
         signal(SIGINT, signalCallbackHandler);
+
     }
 }
 

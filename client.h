@@ -8,7 +8,7 @@
 *
 */
 
-#ifndef CLIENT_H   
+#ifndef CLIENT_H
 #define CLIENT_H
 
 #include <stdlib.h>
@@ -27,10 +27,9 @@
 #define MAX_BUFFER 1035
 #define SOCKET_ADDRESS struct sockaddr
 
-
 // Global variables
 int socket_server, socket_client;
-
+bool is_inifite_loop = false;
 
 // Function definitions
 
@@ -44,7 +43,5 @@ void signalCallbackHandler(int signum);
  * Will handle the client communication 
 */
 void chat();
-
-
 
 #endif

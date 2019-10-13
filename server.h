@@ -8,9 +8,8 @@
 *
 */
 
-#ifndef SERVER_H   
+#ifndef SERVER_H
 #define SERVER_H
-
 
 #include <stdlib.h>
 #include <string.h>
@@ -34,13 +33,12 @@
 
 struct Client
 {
-    int client_id;
+    int client_socket_id;
     int client_code;
     int subscribed_channels[256];
     long int subscribed_time[256];
     int subscribed_read_count[256];
 };
-
 
 typedef struct message
 {
@@ -57,16 +55,11 @@ struct Channel
     int message_capacity;
 };
 
-
-
 // Global variables
 int socket_server;
 int client_unique_id = 1;
 struct Channel channels[256];
 char **loop_buffer;
-bool loop_breaker = false;
-bool is_inifite_loop = false;
-
 
 // Function definitions
 
@@ -74,7 +67,6 @@ bool is_inifite_loop = false;
  * Exit function 
  */
 void signalCallbackHandler(int signum);
-
 
 /**
  * Initialises the Client
@@ -147,7 +139,5 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message);
  * Will handle the client communication 
 */
 void chat(struct Client *cl);
-
-
 
 #endif
