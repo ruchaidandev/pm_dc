@@ -15,10 +15,9 @@
  */
 void signalCallbackHandler(int signum)
 {
-    if (is_inifite_loop)
+    if (is_inifite_loop == true)
     {
-        write(socket_server, "BREAK\n", 5);
-        printf("\n");
+       printf("\n");
         is_inifite_loop = false;
     }
     else
@@ -52,14 +51,12 @@ void chat()
     // Looping till the client exits
     for (;;)
     {
-     
         // Setting the buffer all zeros
         memset(buff, 0, MAX_BUFFER);
 
         // Disabling the input for the livefeed
         if (is_inifite_loop == false)
         {
-            printf("Heree\n");
             n = 0;
             // Getting input from the client
             while ((buff[n++] = getchar()) != '\n')
@@ -78,13 +75,16 @@ void chat()
         else if (strncmp("LIVEFEED", buff, 8) == 0) // LIVEFEED Command
         {
             is_inifite_loop = true;
+            
         }
-
-        write(socket_server, buff, sizeof(buff));
+    
+        
+        if(is_inifite_loop == false){
+            write(socket_server, buff, sizeof(buff));
+        }
 
         // Setting the buffer all zeros
         memset(buff, 0, MAX_BUFFER);
-
         // Reading from server
         read(socket_server, buff, MAX_BUFFER);
 

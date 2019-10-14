@@ -187,9 +187,10 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
         }
         else
         {
+
             // Check message in range from 0 to 1024
             // 1026 is to avoid the \n \0 trailing in the message.
-            if (strlen(value) > 0 && strlen(value) < 1026)
+            if (value != NULL && strlen(value) > 0 && strlen(value) < 1026)
             {
                 pushMessageToChannel(cl, channel_id, value);
                 memset(buffer, 0, MAX_BUFFER);
@@ -339,16 +340,15 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
                      * Reading BREAK from client
                      */
                     memset(buffer, 0, MAX_BUFFER);
-                    read(cl->client_socket_id, buffer, sizeof(buffer));
-                    if (strncmp("BREAK", buffer, 5) == 0)
-                    {
-                        break;
-                        // Exit loop
-                    }
+                    // read(cl->client_socket_id, buffer, sizeof(buffer));
+                    // if (strncmp("BREAK", buffer, 5) == 0)
+                    // {
+                    //     memset(buffer, 0, MAX_BUFFER);
+                    //     break;
+                    //     // Exit loop
+                    // }
                     getNextChannelMessage(cl, channel_id, buffer);
                 }
-                printf("Here\n");
-                memset(buffer, 0, MAX_BUFFER);
                 return 4;
             }
         }
@@ -375,6 +375,8 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
 {
     // Setting error message all zeros
     memset(error_message, 0, MAX_BUFFER);
+        printf("%s", buffer);
+
     if (strncmp("BYE", buffer, 3) == 0) // BYE command
     {
         close(cl->client_socket_id);
@@ -406,11 +408,6 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     {
         return getLiveFeed(cl, buffer, error_message);
     }
-    else
-    {
-        sprintf(error_message, "Invalid command.\n");
-        return -1;
-    }
 }
 
 /**
@@ -437,7 +434,6 @@ void chat(struct Client *cl)
 
         // Reading the message from the client
         read(socket_client, buff, sizeof(buff));
-
         // Client command / input check
         int response = checkClientCommand(cl, buff, error_message);
         if (response == 1)
@@ -473,12 +469,12 @@ void chat(struct Client *cl)
             continue;
         }
 
-        // print buffer which contains the client contents
-        memset(buff, 0, MAX_BUFFER);
-        n = 0;
-        // copy server message in the buffer
-        while ((buff[n++] = getchar()) != '\n')
-            ;
+        // // print buffer which contains the client contents
+        // memset(buff, 0, MAX_BUFFER);
+        // n = 0;
+        // // copy server message in the buffer
+        // while ((buff[n++] = getchar()) != '\n')
+        //     ;
 
         // Write to client
         write(socket_client, buff, sizeof(buff));
