@@ -27,7 +27,8 @@ void signalCallbackHandler(int signum)
  * Accepting and waiting for new clients
  */
 int listenForClients(){
-    int len, socket_client;
+    int socket_client;
+    socklen_t len;
     struct sockaddr_in cli;
     // Listening to new clients
     if ((listen(socket_server, MAX_CLIENT_QUEUE)) != 0)
@@ -55,12 +56,10 @@ int listenForClients(){
  */
 struct Client initialiseClient(int socket_client)
 {
-    // The thread id
-    pthread_t thread_id;
     // Setting new client
     struct Client cl = {
         socket_client,
-        thread_id,
+        0, // Pthread id
         client_unique_id++,
         {0}, // Allocating zeros
         {0},
@@ -87,11 +86,14 @@ int checkClientInChannel(struct Client *cl, int channel_id)
  */
 void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_client)
 {
+    pthread_mutex_lock(&mutex_lock);
     if (channels[channel_id].message_count > channels[channel_id].message_capacity)
     {
         // Re allocating memory with messages's size
         int *response = realloc(channels[channel_id].messages, sizeof(Message) * channels[channel_id].message_count);
-        channels[channel_id].message_capacity += 1;
+        if(response > 0){
+            channels[channel_id].message_capacity += 1;
+        }
     }
 
     int message_index = channels[channel_id].message_count;
@@ -105,6 +107,8 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
     channels[channel_id].messages[message_index] = msg;
     channels[channel_id].message_count += 1;
     cl->subscribed_read_count[channel_id] += 1;
+    pthread_mutex_unlock(&mutex_lock);
+
 }
 
 /**
@@ -338,6 +342,8 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             return -1;
         }
     }
+
+    return 0;
 }
 
 /**
@@ -484,6 +490,8 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     {
         return getLiveFeed(cl, buffer, error_message);
     }
+
+    return 0; // Return 0 by default
 }
 
 /**
@@ -494,7 +502,6 @@ void *chat(void *param)
 {
     char buff[MAX_BUFFER];
     char error_message[MAX_BUFFER];
-    int n;
     struct Client *cl = param;
     int socket_client = cl->client_socket_id;
 
@@ -584,8 +591,7 @@ void connectClient(){
  */
 int main(int argc, char *argv[])
 {
-    int socket_client, len;
-    struct sockaddr_in servaddr, cli;
+    struct sockaddr_in servaddr;
 
     // Creating socket
     socket_server = socket(AF_INET, SOCK_STREAM, 0);
@@ -628,7 +634,6 @@ int main(int argc, char *argv[])
         channels[counter].message_count = 0;
         channels[counter].message_capacity = 9;
     }
-
 
     // Connect clients to server
     connectClient();

@@ -62,7 +62,7 @@ int socket_server;
 int client_unique_id = 1;
 struct Channel channels[256];
 char **loop_buffer;
-
+pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 // Function definitions
 
 /**
