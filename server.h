@@ -107,7 +107,7 @@ void displayChannelList(struct Client *cl, char *buffer);
 /**
  * Get the next channel message for the given channel
  */
-int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer);
+int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel);
 
 /**
  * Get the next message of a given channel or get the next 

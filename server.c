@@ -238,10 +238,12 @@ void displayChannelList(struct Client *cl, char *buffer)
     }
 }
 
+
+
 /**
  * Get the next channel message for the given channel
  */
-int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer)
+int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel)
 {
     // For all messages in the channel
     for (int itr = 0; itr < channels[channel_id].message_count; itr++)
@@ -254,7 +256,12 @@ int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer)
             {
                 cl->subscribed_read_count[channel_id] += 1;
                 memset(buffer, 0, MAX_BUFFER);
-                sprintf(buffer, "|LL|%s", channels[channel_id].messages[read_itr]->content);
+                // Checking whether to print the channel id
+                if(print_channel == true){
+                    sprintf(buffer, "|LL|%d:%s", channel_id, channels[channel_id].messages[read_itr]->content);
+                }else{
+                    sprintf(buffer, "|LL|%s", channels[channel_id].messages[read_itr]->content);
+                }
                 write(cl->client_socket_id, buffer, strlen(buffer));
                 return 4;
             }
@@ -272,14 +279,32 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
     char *value;
     value = strtok(buffer, " ");
 
+    // When a channel is id provided
+    value = strtok(NULL, " ");
+
     // When no channel is provided
     if (value == NULL)
     {
+        bool not_subscribed_to_any = true;
+        // Iterating over all channels
+        for(int itr =0; itr < 256; itr++){
+            if(cl->subscribed_channels[itr] == 1){
+                not_subscribed_to_any = false;
+                // For all messages in the channel
+                getNextChannelMessage(cl, itr, buffer, true);
+                memset(buffer, 0, MAX_BUFFER);
+                return 4;
+            }
+        }
+        
+        if(not_subscribed_to_any == true){
+            sprintf(error_message, "Not subscribed to any channels.\n");
+            return -1;
+        }
     }
     else
     {
-        // When a channel is id provided
-        value = strtok(NULL, " ");
+        
         int channel_id = atoi(value);
         if (channel_id >= 0 && channel_id < 256)
         {
@@ -292,7 +317,7 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             else
             {
                 // For all messages in the channel
-                getNextChannelMessage(cl, channel_id, buffer);
+                getNextChannelMessage(cl, channel_id, buffer, false);
                 memset(buffer, 0, MAX_BUFFER);
                 return 4;
             }
@@ -313,15 +338,54 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
-
+    // When a channel is id provided
+    value = strtok(NULL, " ");
+    
     // When no channel is provided
     if (value == NULL)
     {
+        bool not_subscribed_to_any = true;
+        for(int itr =0; itr < 256; itr++){
+            if(cl->subscribed_channels[itr] == 1){
+                not_subscribed_to_any = false;
+            }
+        }
+        if(not_subscribed_to_any == true){
+            sprintf(error_message, "Not subscribed to any channels.\n");
+            return -1;
+        }
+
+        write(cl->client_socket_id, "OK", 2);
+        memset(buffer, 0, MAX_BUFFER);
+
+        // Iterating over all channels
+        while (true)
+        {
+            
+            for(int itr =0; itr < 256; itr++){
+                if(cl->subscribed_channels[itr] == 1){
+                    /**
+                     * Reading break point from client
+                     */
+                    memset(buffer, 0, MAX_BUFFER);
+                    read(cl->client_socket_id, buffer, sizeof(buffer));
+                    if (strncmp("OK", buffer, 2) == 0)
+                    {
+                        memset(buffer, 0, MAX_BUFFER);
+                        break;
+                        // Exit loop
+                    }
+                    getNextChannelMessage(cl, itr, buffer, false);
+                }
+            }
+           
+        }
+        return 5;
+       
     }
     else
     {
-        // When a channel is id provided
-        value = strtok(NULL, " ");
+        
         int channel_id = atoi(value);
         if (channel_id >= 0 && channel_id < 256)
         {
@@ -333,23 +397,26 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
             }
             else
             {
+                write(cl->client_socket_id, "OK", 2);
+                memset(buffer, 0, MAX_BUFFER);
                 // For all messages in the channel
                 while (true)
                 {
+                    
                     /**
-                     * Reading BREAK from client
+                     * Reading break point from client
                      */
                     memset(buffer, 0, MAX_BUFFER);
-                    // read(cl->client_socket_id, buffer, sizeof(buffer));
-                    // if (strncmp("BREAK", buffer, 5) == 0)
-                    // {
-                    //     memset(buffer, 0, MAX_BUFFER);
-                    //     break;
-                    //     // Exit loop
-                    // }
-                    getNextChannelMessage(cl, channel_id, buffer);
+                    read(cl->client_socket_id, buffer, sizeof(buffer));
+                    if (strncmp("OK", buffer, 2) == 0)
+                    {
+                        memset(buffer, 0, MAX_BUFFER);
+                        break;
+                        // Exit loop
+                    }
+                    getNextChannelMessage(cl, channel_id, buffer, false);
                 }
-                return 4;
+                return 5;
             }
         }
         else
@@ -368,14 +435,13 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
  *  1 : Continue the loop
  *  2 : Break the loop
  *  3 : Reinitiate a new client
- *  4 : Print in a loop
- *   
+ *  4 : Print in a loop with sending a blank loop line
+ *  5 : Print in a loop 
  */
 int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
 {
     // Setting error message all zeros
     memset(error_message, 0, MAX_BUFFER);
-        printf("%s", buffer);
 
     if (strncmp("BYE", buffer, 3) == 0) // BYE command
     {
@@ -438,7 +504,9 @@ void chat(struct Client *cl)
         int response = checkClientCommand(cl, buff, error_message);
         if (response == 1)
         {
-            // Write to client
+            // Write to client            // Sending loop break char to eliminate waiting for input
+            // in client side
+            //write(socket_client, "|LL|", 5);
             write(socket_client, buff, sizeof(buff));
             continue;
         }
@@ -460,6 +528,10 @@ void chat(struct Client *cl)
             // Sending loop break char to eliminate waiting for input
             // in client side
             write(socket_client, "|LL|", 5);
+            continue;
+        }
+        else if (response == 5)
+        {
             continue;
         }
         else if (response == -1)

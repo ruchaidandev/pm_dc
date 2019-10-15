@@ -19,6 +19,7 @@ void signalCallbackHandler(int signum)
     {
        printf("\n");
         is_inifite_loop = false;
+        write(socket_server, "OK", 2);
     }
     else
     {
@@ -72,12 +73,15 @@ void chat()
             printf("Client disconnected.\n");
             exit(0);
         }
-        else if (strncmp("LIVEFEED", buff, 8) == 0) // LIVEFEED Command
-        {
-            is_inifite_loop = true;
+        // else if (strncmp("LIVEFEED", buff, 8) == 0) // LIVEFEED Command
+        // {
             
-        }
-    
+        //     write(socket_server, buff, sizeof(buff));
+        //     // Setting the buffer all zeros
+        //     memset(buff, 0, MAX_BUFFER);
+        //     read(socket_server, buff, MAX_BUFFER);
+            
+        // }
         
         if(is_inifite_loop == false){
             write(socket_server, buff, sizeof(buff));
@@ -87,14 +91,19 @@ void chat()
         memset(buff, 0, MAX_BUFFER);
         // Reading from server
         read(socket_server, buff, MAX_BUFFER);
-
-        // Printing loop lines
-        value = strtok(buff, "|LL|");
-        while (value != NULL)
-        {
-            printf("%s", value);
-            value = strtok(NULL, "|LL|");
+        if(strncmp("OK", buff, 2) == 0){
+            is_inifite_loop = true;
+            continue;
+        }else{
+            // Printing loop lines
+            value = strtok(buff, "|LL|");
+            while (value != NULL)
+            {
+                printf("%s", value);
+                value = strtok(NULL, "|LL|");
+            }
         }
+       
 
         // Detect SIGINT
         signal(SIGINT, signalCallbackHandler);
