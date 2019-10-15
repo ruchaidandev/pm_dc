@@ -24,11 +24,9 @@ void signalCallbackHandler(int signum)
 }
 
 /**
- * Initialises the Client
- * Assigns all new structures with channels
+ * Accepting and waiting for new clients
  */
-struct Client initialiseClient()
-{
+int listenForClients(){
     int len, socket_client;
     struct sockaddr_in cli;
     // Listening to new clients
@@ -48,9 +46,21 @@ struct Client initialiseClient()
         exit(-1);
     }
 
+    return socket_client;
+} 
+
+/**
+ * Initialises the Client
+ * Assigns all new structures with channels
+ */
+struct Client initialiseClient(int socket_client)
+{
+    // The thread id
+    pthread_t thread_id;
     // Setting new client
     struct Client cl = {
         socket_client,
+        thread_id,
         client_unique_id++,
         {0}, // Allocating zeros
         {0},
@@ -446,7 +456,7 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     if (strncmp("BYE", buffer, 3) == 0) // BYE command
     {
         close(cl->client_socket_id);
-        return 3;
+        return 2;
     }
     else if (strncmp("SUB", buffer, 3) == 0) // SUB command
     {
@@ -480,11 +490,12 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
  * Chat function
  * Will handle the client communication 
 */
-void chat(struct Client *cl)
+void *chat(void *param)
 {
     char buff[MAX_BUFFER];
     char error_message[MAX_BUFFER];
     int n;
+    struct Client *cl = param;
     int socket_client = cl->client_socket_id;
 
     // Sending the welcome message to client
@@ -512,16 +523,9 @@ void chat(struct Client *cl)
         }
         else if (response == 2)
         {
-            break;
-        }
-        else if (response == 3)
-        {
-            // Write to client
-            *cl = initialiseClient();
-            memset(buff, 0, MAX_BUFFER);
-            sprintf(buff, "Welcome! Your client ID is %d.\n", cl->client_code);
-            write(cl->client_socket_id, buff, sizeof(buff));
-            continue;
+            // Close thread
+            pthread_join(cl->thread_id, NULL);
+            return NULL;
         }
         else if (response == 4)
         {
@@ -541,22 +545,43 @@ void chat(struct Client *cl)
             continue;
         }
 
-        // // print buffer which contains the client contents
-        // memset(buff, 0, MAX_BUFFER);
-        // n = 0;
-        // // copy server message in the buffer
-        // while ((buff[n++] = getchar()) != '\n')
-        //     ;
-
+       
         // Write to client
         write(socket_client, buff, sizeof(buff));
 
         // Detect SIGINT
         signal(SIGINT, signalCallbackHandler);
     }
+
+    // If the loop exits return NULL
+    return NULL;
 }
 
-// Driver function
+/**
+ * Connecting client to the server
+ * Will loop till it finds new client and create new thread
+ */ 
+void connectClient(){
+    while(true){
+        // Listening for new clients
+        int socket_client = listenForClients();
+        // If new client
+        if(socket_client > 0){
+             // Initialise new client
+            struct Client cl = initialiseClient(socket_client);
+
+            // Creating new thread
+            pthread_create(&cl.thread_id, NULL, chat, &cl);
+          
+        }   
+       
+    }
+    
+}
+
+/**
+ * Main method of the server
+ */
 int main(int argc, char *argv[])
 {
     int socket_client, len;
@@ -604,11 +629,9 @@ int main(int argc, char *argv[])
         channels[counter].message_capacity = 9;
     }
 
-    // Initialise new client
-    struct Client cl = initialiseClient();
 
-    // Function for chatting between client and server
-    chat(&cl);
+    // Connect clients to server
+    connectClient();
 
     // After chatting closing the socket
     close(socket_server);

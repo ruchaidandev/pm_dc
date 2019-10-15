@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <time.h>
+#include <pthread.h>
 
 #define MAX_BUFFER 1035
 #define DEFAULT_PORT 12345
@@ -34,6 +35,7 @@
 struct Client
 {
     int client_socket_id;
+    pthread_t thread_id;
     int client_code;
     int subscribed_channels[256];
     long int subscribed_time[256];
@@ -69,10 +71,15 @@ char **loop_buffer;
 void signalCallbackHandler(int signum);
 
 /**
+ * Accepting and waiting for new clients
+ */
+int listenForClients();
+
+/**
  * Initialises the Client
  * Assigns all new structures with channels
  */
-struct Client initialiseClient();
+struct Client initialiseClient(int socket_client);
 
 /**
  * Check the Client in the given channel
@@ -138,6 +145,12 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message);
  * Chat function
  * Will handle the client communication 
 */
-void chat(struct Client *cl);
+void *chat(void *param);
+
+/**
+ * Connecting client to the server
+ * Will loop till it finds new client and create new thread
+ */ 
+void connectClient();
 
 #endif

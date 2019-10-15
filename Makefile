@@ -1,14 +1,14 @@
 CC = c99
 CFLAGS = -g -Wall 
-LIBS = -lrt -pthread 
+LIBS = -pthread -lrt
 
 all: server client
 
 server: server.c
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ $(LIBS) $(CFLAGS)
 
 client: client.c
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ $(LIBS) $(CFLAGS)
 
 clean:
 	rm -f server *.o
