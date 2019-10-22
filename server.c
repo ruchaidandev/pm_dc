@@ -15,17 +15,15 @@
  */
 void signalCallbackHandler(int signum)
 {
-    printf("\nDisconnecting clients.\n");
-    int count;
-    for(count = 0; count < connectedClients.client_count; count++){
-        close(connectedClients.clients[count]->client_socket_id);
-        pthread_kill(connectedClients.clients[count]->thread_id);
+    printf("Clearing all channels.\n");
+    for(int itr = 0; itr < 256; itr++){
+        free(channels[itr].messages);
     }
-    printf("\nClosed %d/%d clients.\n",count - 1 ,connectedClients.client_count);
-    printf("\nClosing server.\n");
+    
+    printf("Closing server.\n");
     close(socket_server);
-
     printf("Server closed.\n");
+
     // Exit program
     exit(signum);
 }
@@ -484,7 +482,6 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
 {
     // Setting error message all zeros
     memset(error_message, 0, MAX_BUFFER);
-    printf("%d\n", cl->client_socket_id);
     if (strncmp("BYE", buffer, 3) == 0) // BYE command
     {
         close(cl->client_socket_id);
@@ -629,8 +626,10 @@ int main(int argc, char *argv[])
     struct sockaddr_in servaddr;
 
     // Initialising connected clients
-    connectedClients.clients = malloc(sizeof(struct Client));
-    connectedClients.client_capacity = -1;
+    // Creating with initial size for 2 clients
+    // Capacity is 1 by default
+    connectedClients.clients = malloc(sizeof(struct Client) * 2);
+    connectedClients.client_capacity = 1;
     connectedClients.client_count = 0;
 
     // Creating socket
@@ -667,6 +666,8 @@ int main(int argc, char *argv[])
     signal(SIGINT, signalCallbackHandler);
 
     // Initialising channels with no messages
+    // Creating with initial size for 10 message per channel
+    // Capacity is 9 by default
     for (int counter = 0; counter < 256; counter++)
     {
         channels[counter].channel_id = counter;
