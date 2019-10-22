@@ -57,6 +57,13 @@ struct Channel
     int message_capacity;
 };
 
+struct ConnectedClients
+{
+    struct Client **clients;
+    int client_count;
+    int client_capacity;
+} connectedClients;
+
 // Global variables
 int socket_server;
 int client_unique_id = 1;
@@ -85,6 +92,11 @@ struct Client initialiseClient(int socket_client);
  * Check the Client in the given channel
  */
 int checkClientInChannel(struct Client *cl, int channel_id);
+
+/**
+ * Dynamically allocate memory to the connected clients
+ */
+void updateConnectedClients(struct Client *cl);
 
 /**
  * Dynamically allocate memory to the messenges in Channels
@@ -150,7 +162,7 @@ void *chat(void *param);
 /**
  * Connecting client to the server
  * Will loop till it finds new client and create new thread
- */ 
+ */
 void connectClient();
 
 #endif

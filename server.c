@@ -15,6 +15,13 @@
  */
 void signalCallbackHandler(int signum)
 {
+    printf("\nDisconnecting clients.\n");
+    int count;
+    for(count = 0; count < connectedClients.client_count; count++){
+        close(connectedClients.clients[count]->client_socket_id);
+        pthread_kill(connectedClients.clients[count]->thread_id);
+    }
+    printf("\nClosed %d/%d clients.\n",count - 1 ,connectedClients.client_count);
     printf("\nClosing server.\n");
     close(socket_server);
 
@@ -79,6 +86,25 @@ int checkClientInChannel(struct Client *cl, int channel_id)
     }
 
     return -1;
+}
+
+/**
+ * Dynamically allocate memory to the connected clients
+ */
+void updateConnectedClients(struct Client *cl)
+{
+    pthread_mutex_lock(&mutex_lock);
+    if (connectedClients.client_count > connectedClients.client_capacity)
+    {
+        // Re allocating memory with messages's size
+        int *response = realloc(connectedClients.clients, sizeof(struct Client) * connectedClients.client_count);
+        if(response > 0){
+           connectedClients.client_capacity += 1;
+        }
+    }
+    connectedClients.clients[connectedClients.client_count] = cl;
+    connectedClients.client_count += 1;
+    pthread_mutex_unlock(&mutex_lock);
 }
 
 /**
@@ -508,6 +534,9 @@ void *chat(void *param)
     // Creating new client for the thread
     struct Client cl = initialiseClient(socket_client_param[0]);
 
+    // Update connected clients
+    updateConnectedClients(&cl);
+
     // Saving the thread ID in the client struct   
     cl.thread_id = pthread_self();
 
@@ -541,6 +570,7 @@ void *chat(void *param)
         {
             // Close thread
             pthread_join(cl.thread_id, NULL);
+            close(cl.client_socket_id);
             return NULL;
         }
         else if (response == 4)
@@ -595,7 +625,13 @@ void connectClient(){
  */
 int main(int argc, char *argv[])
 {
+    // Server address
     struct sockaddr_in servaddr;
+
+    // Initialising connected clients
+    connectedClients.clients = malloc(sizeof(struct Client));
+    connectedClients.client_capacity = -1;
+    connectedClients.client_count = 0;
 
     // Creating socket
     socket_server = socket(AF_INET, SOCK_STREAM, 0);
@@ -638,6 +674,7 @@ int main(int argc, char *argv[])
         channels[counter].message_count = 0;
         channels[counter].message_capacity = 9;
     }
+
 
     // Connect clients to server
     connectClient();
