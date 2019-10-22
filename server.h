@@ -26,7 +26,7 @@
 #include <pthread.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include <sys/sem.h>
+#include <semaphore.h>
 
 #define MAX_BUFFER 1035
 #define DEFAULT_PORT 12345
@@ -71,7 +71,9 @@ struct ConnectedClients
 int socket_server;
 int shm_id;
 int client_unique_id = 1;
-
+// Semaphore locks
+sem_t mutex, writers_lock; 
+int readers_count = 0;
 char **loop_buffer;
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 

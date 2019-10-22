@@ -27,6 +27,17 @@ void signalCallbackHandler(int signum)
     exit(signum);
 }
 
+void *reader(void *arg){
+
+}
+
+void *writer(void *arg){
+    int client_id = (int) arg;
+
+    sem_wait(&writers_lock);
+    
+}
+
 /**
  * Accepting and waiting for new clients
  */
@@ -632,7 +643,9 @@ int main(int argc, char *argv[])
     struct sockaddr_in servaddr;
     // Shared memory
     channel *channels;
-
+    // Semaphore initialisation
+    sem_init(&mutex,0,1);
+    sem_init(&writers_lock,0,1);
     // Initialising connected clients
     // Creating with initial size for 2 clients
     // Capacity is 1 by default
