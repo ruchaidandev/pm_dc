@@ -458,7 +458,7 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
 {
     // Setting error message all zeros
     memset(error_message, 0, MAX_BUFFER);
-
+    printf("%d\n", cl->client_socket_id);
     if (strncmp("BYE", buffer, 3) == 0) // BYE command
     {
         close(cl->client_socket_id);
@@ -502,12 +502,20 @@ void *chat(void *param)
 {
     char buff[MAX_BUFFER];
     char error_message[MAX_BUFFER];
-    struct Client *cl = param;
-    int socket_client = cl->client_socket_id;
+    // Retrieving the param as an int
+    int *socket_client_param = (int *)param;
+    
+    // Creating new client for the thread
+    struct Client cl = initialiseClient(socket_client_param[0]);
 
+    // Saving the thread ID in the client struct   
+    cl.thread_id = pthread_self();
+
+    // Socket ID for the chat
+    int socket_client = cl.client_socket_id;
     // Sending the welcome message to client
     memset(buff, 0, MAX_BUFFER);
-    sprintf(buff, "Welcome! Your client ID is %d.\n", cl->client_code);
+    sprintf(buff, "Welcome! Your client ID is %d.\n", cl.client_code);
     write(socket_client, buff, sizeof(buff));
 
     // Looping till the server exits
@@ -519,10 +527,11 @@ void *chat(void *param)
         // Reading the message from the client
         read(socket_client, buff, sizeof(buff));
         // Client command / input check
-        int response = checkClientCommand(cl, buff, error_message);
+        int response = checkClientCommand(&cl, buff, error_message);
         if (response == 1)
         {
-            // Write to client            // Sending loop break char to eliminate waiting for input
+            // Write to client            
+            // Sending loop break char to eliminate waiting for input
             // in client side
             //write(socket_client, "|LL|", 5);
             write(socket_client, buff, sizeof(buff));
@@ -531,7 +540,7 @@ void *chat(void *param)
         else if (response == 2)
         {
             // Close thread
-            pthread_join(cl->thread_id, NULL);
+            pthread_join(cl.thread_id, NULL);
             return NULL;
         }
         else if (response == 4)
@@ -551,7 +560,6 @@ void *chat(void *param)
             write(socket_client, error_message, sizeof(error_message));
             continue;
         }
-
        
         // Write to client
         write(socket_client, buff, sizeof(buff));
@@ -574,16 +582,12 @@ void connectClient(){
         int socket_client = listenForClients();
         // If new client
         if(socket_client > 0){
-             // Initialise new client
-            struct Client cl = initialiseClient(socket_client);
-
-            // Creating new thread
-            pthread_create(&cl.thread_id, NULL, chat, &cl);
-          
+             // Creating new thread
+            pthread_t thread_id;
+            // Passing the socket client value 
+            pthread_create(&thread_id, NULL, &chat, &socket_client);
         }   
-       
     }
-    
 }
 
 /**
