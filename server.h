@@ -24,6 +24,9 @@
 #include <stdbool.h>
 #include <time.h>
 #include <pthread.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
 
 #define MAX_BUFFER 1035
 #define DEFAULT_PORT 12345
@@ -49,13 +52,13 @@ typedef struct message
     long int time;
 } Message;
 
-struct Channel
+typedef struct Channel
 {
     int channel_id;
     Message **messages;
     int message_count;
     int message_capacity;
-};
+} channel;
 
 struct ConnectedClients
 {
@@ -66,10 +69,12 @@ struct ConnectedClients
 
 // Global variables
 int socket_server;
+int shm_id;
 int client_unique_id = 1;
-struct Channel channels[256];
+
 char **loop_buffer;
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
+
 // Function definitions
 
 /**
@@ -101,44 +106,44 @@ void updateConnectedClients(struct Client *cl);
 /**
  * Dynamically allocate memory to the messenges in Channels
  */
-void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_client);
+void pushMessageToChannel(channel *channels, struct Client *cl, int channel_id, char *message_from_client);
 
 /**
  * Subscribe client to channel function
  */
-int subClientToChannel(struct Client *cl, char *buffer, char *error_message);
+int subClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Unsubscribe client to channel function
  */
-int unsubClientToChannel(struct Client *cl, char *buffer, char *error_message);
+int unsubClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Send message to the channel function
  */
-int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message);
+int sendMessageToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Display the channel list with tab delimeter
  */
-void displayChannelList(struct Client *cl, char *buffer);
+void displayChannelList(channel *channels, struct Client *cl, char *buffer);
 
 /**
  * Get the next channel message for the given channel
  */
-int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel);
+int getNextChannelMessage(channel *channels, struct Client *cl, int channel_id, char *buffer, bool print_channel);
 
 /**
  * Get the next message of a given channel or get the next 
  * message for any channel
  */
-int getNextMessage(struct Client *cl, char *buffer, char *error_message);
+int getNextMessage(channel *channels, struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Get the live feed messages of a given channel or get the next 
  * message for any channel
  */
-int getLiveFeed(struct Client *cl, char *buffer, char *error_message);
+int getLiveFeed(channel *channels, struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Client command check
@@ -151,18 +156,18 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message);
  *  4 : Print in a loop
  *   
  */
-int checkClientCommand(struct Client *cl, char *buffer, char *error_message);
+int checkClientCommand(channel *channels, struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Chat function
  * Will handle the client communication 
 */
-void *chat(void *param);
+void chat(int socket_client, channel *channels);
 
 /**
  * Connecting client to the server
  * Will loop till it finds new client and create new thread
  */
-void connectClient();
+void connectClient(channel *channels);
 
 #endif

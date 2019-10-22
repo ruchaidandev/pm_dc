@@ -15,14 +15,13 @@
  */
 void signalCallbackHandler(int signum)
 {
-    printf("Clearing all channels.\n");
-    for(int itr = 0; itr < 256; itr++){
-        free(channels[itr].messages);
-    }
     
     printf("Closing server.\n");
     close(socket_server);
     printf("Server closed.\n");
+
+    // Delete shared memory
+    shmctl(shm_id, IPC_RMID, NULL);
 
     // Exit program
     exit(signum);
@@ -108,7 +107,7 @@ void updateConnectedClients(struct Client *cl)
 /**
  * Dynamically allocate memory to the messenges in Channels
  */
-void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_client)
+void pushMessageToChannel(channel *channels, struct Client *cl, int channel_id, char *message_from_client)
 {
     pthread_mutex_lock(&mutex_lock);
     if (channels[channel_id].message_count > channels[channel_id].message_capacity)
@@ -138,7 +137,7 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
 /**
  * Subscribe client to channel function
  */
-int subClientToChannel(struct Client *cl, char *buffer, char *error_message)
+int subClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
@@ -172,7 +171,7 @@ int subClientToChannel(struct Client *cl, char *buffer, char *error_message)
 /**
  * Unsubscribe client to channel function
  */
-int unsubClientToChannel(struct Client *cl, char *buffer, char *error_message)
+int unsubClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
@@ -205,7 +204,7 @@ int unsubClientToChannel(struct Client *cl, char *buffer, char *error_message)
 /**
  * Send message to the channel function
  */
-int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
+int sendMessageToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
@@ -230,7 +229,7 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
             // 1026 is to avoid the \n \0 trailing in the message.
             if (value != NULL && strlen(value) > 0 && strlen(value) < 1026)
             {
-                pushMessageToChannel(cl, channel_id, value);
+                pushMessageToChannel(channels, cl, channel_id, value);
                 memset(buffer, 0, MAX_BUFFER);
                 return 1;
             }
@@ -251,7 +250,7 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
 /**
  * Display the channel list with tab delimeter
  */
-void displayChannelList(struct Client *cl, char *buffer)
+void displayChannelList(channel *channels, struct Client *cl, char *buffer)
 {
     for (int counter = 0; counter < 256; counter++)
     {
@@ -281,7 +280,7 @@ void displayChannelList(struct Client *cl, char *buffer)
 /**
  * Get the next channel message for the given channel
  */
-int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel)
+int getNextChannelMessage(channel *channels, struct Client *cl, int channel_id, char *buffer, bool print_channel)
 {
     // For all messages in the channel
     for (int itr = 0; itr < channels[channel_id].message_count; itr++)
@@ -312,7 +311,7 @@ int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool 
  * Get the next message of a given channel or get the next 
  * message for any channel
  */
-int getNextMessage(struct Client *cl, char *buffer, char *error_message)
+int getNextMessage(channel *channels, struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
@@ -329,7 +328,7 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             if(cl->subscribed_channels[itr] == 1){
                 not_subscribed_to_any = false;
                 // For all messages in the channel
-                getNextChannelMessage(cl, itr, buffer, true);
+                getNextChannelMessage(channels, cl, itr, buffer, true);
                 memset(buffer, 0, MAX_BUFFER);
                 return 4;
             }
@@ -355,7 +354,7 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             else
             {
                 // For all messages in the channel
-                getNextChannelMessage(cl, channel_id, buffer, false);
+                getNextChannelMessage(channels, cl, channel_id, buffer, false);
                 memset(buffer, 0, MAX_BUFFER);
                 return 4;
             }
@@ -374,7 +373,7 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
  * Get the live feed messages of a given channel or get the next 
  * message for any channel
  */
-int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
+int getLiveFeed(channel *channels, struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
@@ -415,7 +414,7 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
                         break;
                         // Exit loop
                     }
-                    getNextChannelMessage(cl, itr, buffer, false);
+                    getNextChannelMessage(channels, cl, itr, buffer, false);
                 }
             }
            
@@ -454,7 +453,7 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
                         break;
                         // Exit loop
                     }
-                    getNextChannelMessage(cl, channel_id, buffer, false);
+                    getNextChannelMessage(channels, cl, channel_id, buffer, false);
                 }
                 return 5;
             }
@@ -478,7 +477,7 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
  *  4 : Print in a loop with sending a blank loop line
  *  5 : Print in a loop 
  */
-int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
+int checkClientCommand(channel *channels, struct Client *cl, char *buffer, char *error_message)
 {
     // Setting error message all zeros
     memset(error_message, 0, MAX_BUFFER);
@@ -489,29 +488,29 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("SUB", buffer, 3) == 0) // SUB command
     {
-        return subClientToChannel(cl, buffer, error_message);
+        return subClientToChannel(channels, cl, buffer, error_message);
     }
     else if (strncmp("UNSUB", buffer, 5) == 0) // UNSUB command
     {
-        return unsubClientToChannel(cl, buffer, error_message);
+        return unsubClientToChannel(channels, cl, buffer, error_message);
     }
     else if (strncmp("SEND", buffer, 4) == 0) // SEND command
     {
-        return sendMessageToChannel(cl, buffer, error_message);
+        return sendMessageToChannel(channels, cl, buffer, error_message);
     }
     else if (strncmp("CHANNELS", buffer, 8) == 0) // CHANNELS command
     {
-        displayChannelList(cl, buffer);
+        displayChannelList(channels, cl, buffer);
         memset(buffer, 0, MAX_BUFFER);
         return 4;
     }
     else if (strncmp("NEXT", buffer, 4) == 0) // NEXT command
     {
-        return getNextMessage(cl, buffer, error_message);
+        return getNextMessage(channels, cl, buffer, error_message);
     }
     else if (strncmp("LIVEFEED", buffer, 8) == 0) // LIVEFEED command
     {
-        return getLiveFeed(cl, buffer, error_message);
+        return getLiveFeed(channels, cl, buffer, error_message);
     }
 
     return 0; // Return 0 by default
@@ -521,39 +520,37 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
  * Chat function
  * Will handle the client communication 
 */
-void *chat(void *param)
+void chat(int socket_client, channel *channels)
 {
     char buff[MAX_BUFFER];
     char error_message[MAX_BUFFER];
-    // Retrieving the param as an int
-    int *socket_client_param = (int *)param;
-    
-    // Creating new client for the thread
-    struct Client cl = initialiseClient(socket_client_param[0]);
 
+    // Creating new client for the thread
+    struct Client cl = initialiseClient(socket_client);
+    printf("Here2\n");
     // Update connected clients
     updateConnectedClients(&cl);
 
     // Saving the thread ID in the client struct   
     cl.thread_id = pthread_self();
 
-    // Socket ID for the chat
-    int socket_client = cl.client_socket_id;
+    
     // Sending the welcome message to client
     memset(buff, 0, MAX_BUFFER);
     sprintf(buff, "Welcome! Your client ID is %d.\n", cl.client_code);
     write(socket_client, buff, sizeof(buff));
-
+    
     // Looping till the server exits
     for (;;)
     {
+        printf("%d\n", channels[1].message_count);
         // Setting the buffer all zeros
         memset(buff, 0, MAX_BUFFER);
 
         // Reading the message from the client
         read(socket_client, buff, sizeof(buff));
         // Client command / input check
-        int response = checkClientCommand(&cl, buff, error_message);
+        int response = checkClientCommand(channels, &cl, buff, error_message);
         if (response == 1)
         {
             // Write to client            
@@ -566,9 +563,13 @@ void *chat(void *param)
         else if (response == 2)
         {
             // Close thread
-            pthread_join(cl.thread_id, NULL);
+            //pthread_join(cl.thread_id, NULL);
             close(cl.client_socket_id);
-            return NULL;
+            // Detattach memory
+            shmat(shm_id, 0, 0);
+            exit(1);
+
+            //return NULL;
         }
         else if (response == 4)
         {
@@ -595,15 +596,15 @@ void *chat(void *param)
         signal(SIGINT, signalCallbackHandler);
     }
 
-    // If the loop exits return NULL
-    return NULL;
+    // // If the loop exits return NULL
+    // return NULL;
 }
 
 /**
  * Connecting client to the server
  * Will loop till it finds new client and create new thread
  */ 
-void connectClient(){
+void connectClient(channel *channels){
     while(true){
         // Listening for new clients
         int socket_client = listenForClients();
@@ -612,7 +613,12 @@ void connectClient(){
              // Creating new thread
             pthread_t thread_id;
             // Passing the socket client value 
-            pthread_create(&thread_id, NULL, &chat, &socket_client);
+            
+            if(fork() == 0){
+                chat(socket_client, channels);
+            }
+            
+            //pthread_create(&thread_id, NULL, &chat, &socket_client);
         }   
     }
 }
@@ -624,6 +630,8 @@ int main(int argc, char *argv[])
 {
     // Server address
     struct sockaddr_in servaddr;
+    // Shared memory
+    channel *channels;
 
     // Initialising connected clients
     // Creating with initial size for 2 clients
@@ -665,6 +673,11 @@ int main(int argc, char *argv[])
     // Detect SIGINT
     signal(SIGINT, signalCallbackHandler);
 
+    // Creating shared memory for the channels
+    
+    shm_id = shmget(IPC_PRIVATE, sizeof(channel) * 256, IPC_CREAT | 0666);
+    channels = (channel *) shmat(shm_id, NULL, 0);
+
     // Initialising channels with no messages
     // Creating with initial size for 10 message per channel
     // Capacity is 9 by default
@@ -676,10 +689,13 @@ int main(int argc, char *argv[])
         channels[counter].message_capacity = 9;
     }
 
-
+    
     // Connect clients to server
-    connectClient();
+    connectClient(channels);
 
     // After chatting closing the socket
     close(socket_server);
+
+    // Delete shared memory
+    shmctl(shm_id, IPC_RMID, NULL);
 }
