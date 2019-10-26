@@ -34,8 +34,8 @@
 #define DEFAULT_PORT 12345
 #define MAX_CLIENT_QUEUE 5
 #define SOCKET_ADDRESS struct sockaddr
-#define SHM_KEY 0x1234
-#define SHM_KEY_CLIENT_ID 0x2345
+#define SHM_KEY 0x2345
+#define SHM_KEY_CLIENT_ID 0x1234
 
 // Stuctures
 
@@ -62,7 +62,7 @@ typedef struct message
 typedef struct Channel
 {
     int channel_id;
-    Message **messages;
+    key_t **messages;
     int message_count;
     int message_capacity;
 } channel;
@@ -78,6 +78,7 @@ struct ConnectedClients
 int socket_server;
 int shm_id;
 int client_shm_id;
+
 // Semaphore locks
 sem_t mutex, writers_lock;
 int readers_count = 0;
