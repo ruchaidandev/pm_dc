@@ -15,13 +15,16 @@
  */
 void signalCallbackHandler(int signum)
 {
-    
     printf("Closing server.\n");
     close(socket_server);
     printf("Server closed.\n");
 
     // Delete shared memory
     shmctl(shm_id, IPC_RMID, NULL);
+    shmctl(client_shm_id, IPC_RMID, NULL);
+
+    sem_destroy(&mutex);
+    sem_destroy(&writers_lock);
 
     // Exit program
     exit(signum);
@@ -69,13 +72,13 @@ int listenForClients(){
  * Initialises the Client
  * Assigns all new structures with channels
  */
-struct Client initialiseClient(int socket_client)
+struct Client initialiseClient(int socket_client, int client_id)
 {
     // Setting new client
     struct Client cl = {
         socket_client,
         0, // Pthread id
-        client_unique_id++,
+        client_id,
         {0}, // Allocating zeros
         {0},
         {0}};
@@ -101,7 +104,9 @@ int checkClientInChannel(struct Client *cl, int channel_id)
  */
 void updateConnectedClients(struct Client *cl)
 {
-    pthread_mutex_lock(&mutex_lock);
+    // Process synchronisation
+    sem_wait(&mutex);
+    // Critical section
     if (connectedClients.client_count > connectedClients.client_capacity)
     {
         // Re allocating memory with messages's size
@@ -112,7 +117,7 @@ void updateConnectedClients(struct Client *cl)
     }
     connectedClients.clients[connectedClients.client_count] = cl;
     connectedClients.client_count += 1;
-    pthread_mutex_unlock(&mutex_lock);
+    sem_post(&mutex);
 }
 
 /**
@@ -536,15 +541,33 @@ void chat(int socket_client, channel *channels)
     char buff[MAX_BUFFER];
     char error_message[MAX_BUFFER];
 
-    // Creating new client for the thread
-    struct Client cl = initialiseClient(socket_client);
-    printf("Here2\n");
+    // Attaching shared memory for client ID
+    client_shm_id = shmget(SHM_KEY_CLIENT_ID, sizeof(int), 0666 | IPC_CREAT);
+    if (client_shm_id  < 0) {
+         exit(-1);
+    }
+    
+    int *client_unique_id = shmat(client_shm_id, (void *)0, 0);
+
+    //  Process synchronisation 
+    sem_wait(&mutex);
+
+    // Critical section
+    int value = *client_unique_id + 1;
+    *client_unique_id = value;
+    // Dettaching the shared memory
+    shmdt(client_unique_id); 
+
+    sem_post(&mutex);
+
+    // Creating new client for the process
+    struct Client cl = initialiseClient(socket_client, value);
+
     // Update connected clients
     updateConnectedClients(&cl);
 
     // Saving the thread ID in the client struct   
-    cl.thread_id = pthread_self();
-
+    //cl.thread_id = pthread_self();
     
     // Sending the welcome message to client
     memset(buff, 0, MAX_BUFFER);
@@ -554,7 +577,6 @@ void chat(int socket_client, channel *channels)
     // Looping till the server exits
     for (;;)
     {
-        printf("%d\n", channels[1].message_count);
         // Setting the buffer all zeros
         memset(buff, 0, MAX_BUFFER);
 
@@ -574,10 +596,9 @@ void chat(int socket_client, channel *channels)
         else if (response == 2)
         {
             // Close thread
-            //pthread_join(cl.thread_id, NULL);
             close(cl.client_socket_id);
             // Detattach memory
-            shmat(shm_id, 0, 0);
+            shmdt(shm_id);
             exit(1);
 
             //return NULL;
@@ -607,15 +628,13 @@ void chat(int socket_client, channel *channels)
         signal(SIGINT, signalCallbackHandler);
     }
 
-    // // If the loop exits return NULL
-    // return NULL;
 }
 
 /**
  * Connecting client to the server
  * Will loop till it finds new client and create new thread
  */ 
-void connectClient(channel *channels){
+void connectClient(){
     while(true){
         // Listening for new clients
         int socket_client = listenForClients();
@@ -623,10 +642,14 @@ void connectClient(channel *channels){
         if(socket_client > 0){
              // Creating new thread
             pthread_t thread_id;
-            // Passing the socket client value 
-            
             if(fork() == 0){
+                // Creating shared memory for the channels
+                // Passing the socket client value 
+                shm_id = shmget(SHM_KEY, sizeof(channel) * 256, IPC_CREAT | 0666);
+                channel *channels = (channel *) shmat(shm_id, (void *) 0, 0);  // Attaching
                 chat(socket_client, channels);
+                shmdt(shm_id); // Detaching
+
             }
             
             //pthread_create(&thread_id, NULL, &chat, &socket_client);
@@ -643,6 +666,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in servaddr;
     // Shared memory
     channel *channels;
+    int *client_unique_id;
     // Semaphore initialisation
     sem_init(&mutex,0,1);
     sem_init(&writers_lock,0,1);
@@ -684,12 +708,32 @@ int main(int argc, char *argv[])
     }
 
     // Detect SIGINT
-    signal(SIGINT, signalCallbackHandler);
+    signal(SIGINT, signalCallbackHandler);  
 
-    // Creating shared memory for the channels
+    // Shared memory for the client id
+    client_shm_id = shmget(SHM_KEY_CLIENT_ID, sizeof(int), 0666 | IPC_CREAT);
+    if (client_shm_id  < 0) {
+         exit(-1);
+    }
     
-    shm_id = shmget(IPC_PRIVATE, sizeof(channel) * 256, IPC_CREAT | 0666);
+    *client_unique_id = (int *) shmat(client_shm_id, (void *) 0, 0);
+    
+    // Setting default value to the shared client id
+    int default_client_id = 0;
+    client_unique_id = &default_client_id;
+    // Dettaching the shared memory
+    shmdt(client_unique_id); 
+
+
+
+    // Shared memory for the channels
+    shm_id = shmget(SHM_KEY, sizeof(channel) * 256, IPC_CREAT | 0666);
+    if (shm_id  < 0) {
+         exit(-1);
+    }
+
     channels = (channel *) shmat(shm_id, NULL, 0);
+    
 
     // Initialising channels with no messages
     // Creating with initial size for 10 message per channel
@@ -701,14 +745,17 @@ int main(int argc, char *argv[])
         channels[counter].message_count = 0;
         channels[counter].message_capacity = 9;
     }
-
+    shmdt(shm_id); 
     
     // Connect clients to server
-    connectClient(channels);
+    connectClient();
 
     // After chatting closing the socket
     close(socket_server);
 
     // Delete shared memory
     shmctl(shm_id, IPC_RMID, NULL);
+    shmctl(client_shm_id, IPC_RMID, NULL);
+    sem_destroy(&mutex);
+    sem_destroy(&writers_lock);
 }

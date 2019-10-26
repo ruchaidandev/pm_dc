@@ -21,17 +21,21 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <stdbool.h>
 #include <time.h>
 #include <pthread.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/mman.h>
 #include <semaphore.h>
 
 #define MAX_BUFFER 1035
 #define DEFAULT_PORT 12345
 #define MAX_CLIENT_QUEUE 5
 #define SOCKET_ADDRESS struct sockaddr
+#define SHM_KEY 0x1234
+#define SHM_KEY_CLIENT_ID 0x2345
 
 // Stuctures
 
@@ -70,11 +74,10 @@ struct ConnectedClients
 // Global variables
 int socket_server;
 int shm_id;
-int client_unique_id = 1;
+int client_shm_id;
 // Semaphore locks
-sem_t mutex, writers_lock; 
+sem_t mutex, writers_lock;
 int readers_count = 0;
-char **loop_buffer;
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Function definitions
@@ -93,7 +96,7 @@ int listenForClients();
  * Initialises the Client
  * Assigns all new structures with channels
  */
-struct Client initialiseClient(int socket_client);
+struct Client initialiseClient(int socket_client, int client_id);
 
 /**
  * Check the Client in the given channel
@@ -170,6 +173,6 @@ void chat(int socket_client, channel *channels);
  * Connecting client to the server
  * Will loop till it finds new client and create new thread
  */
-void connectClient(channel *channels);
+void connectClient();
 
 #endif

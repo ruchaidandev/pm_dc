@@ -5,7 +5,7 @@ LIBS = -pthread -lrt
 all: server client
 
 server: server.c
-	$(CC) -o $@ $^ $(LIBS) $(CFLAGS)
+	$(CC) -o $@ $^ $(LIBS) $(CFLAGS) 
 
 client: client.c
 	$(CC) -o $@ $^ $(LIBS) $(CFLAGS)
