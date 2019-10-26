@@ -15,9 +15,7 @@
  */
 void signalCallbackHandler(int signum)
 {
-    printf("Closing server.\n");
     close(socket_server);
-    printf("Server closed.\n");
 
     // Delete shared memory
     shmctl(shm_id, IPC_RMID, NULL);
@@ -26,19 +24,9 @@ void signalCallbackHandler(int signum)
     sem_destroy(&mutex);
     sem_destroy(&writers_lock);
 
+    printf("\n");
     // Exit program
     exit(signum);
-}
-
-void *reader(void *arg){
-
-}
-
-void *writer(void *arg){
-    int client_id = (int) arg;
-
-    sem_wait(&writers_lock);
-    
 }
 
 /**
@@ -125,7 +113,7 @@ void updateConnectedClients(struct Client *cl)
  */
 void pushMessageToChannel(channel *channels, struct Client *cl, int channel_id, char *message_from_client)
 {
-    pthread_mutex_lock(&mutex_lock);
+    pthread_mutex_lock(&mutex_lock); 
     if (channels[channel_id].message_count > channels[channel_id].message_capacity)
     {
         // Re allocating memory with messages's size
@@ -146,14 +134,14 @@ void pushMessageToChannel(channel *channels, struct Client *cl, int channel_id, 
     channels[channel_id].messages[message_index] = msg;
     channels[channel_id].message_count += 1;
     cl->subscribed_read_count[channel_id] += 1;
-    pthread_mutex_unlock(&mutex_lock);
+    pthread_mutex_unlock(&mutex_lock); 
 
 }
 
 /**
  * Subscribe client to channel function
  */
-int subClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message)
+int subClientToChannel(struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
@@ -187,7 +175,7 @@ int subClientToChannel(channel *channels, struct Client *cl, char *buffer, char 
 /**
  * Unsubscribe client to channel function
  */
-int unsubClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message)
+int unsubClientToChannel(struct Client *cl, char *buffer, char *error_message)
 {
     char *value;
     value = strtok(buffer, " ");
@@ -273,19 +261,23 @@ void displayChannelList(channel *channels, struct Client *cl, char *buffer)
         if (cl->subscribed_channels[counter] == 1)
         {
             int message_count_after_subscribed = 0;
-            for (int itr = 0; itr < channels[counter].message_count; itr++)
-            {
-                // Checks the time of subscribed
-                // Counts the total messages client did not read
-                if (channels[counter].messages[itr]->time > cl->subscribed_time[counter])
-                {
-                    message_count_after_subscribed += 1;
-                }
-            }
+            // for (int itr = 0; itr < channels[counter].message_count; itr++)
+            // {
+            //     // Checks the time of subscribed
+            //     // Counts the total messages client did not read
+            //     if (channels[counter].messages[itr]->time > cl->subscribed_time[counter])
+            //     {
+            //         message_count_after_subscribed += 1;
+            //     }
+            // }
             memset(buffer, 0, MAX_BUFFER);
             sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count,
                     cl->subscribed_read_count[counter],
-                    message_count_after_subscribed - cl->subscribed_read_count[counter]);
+                    0);
+
+            // sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count,
+            // cl->subscribed_read_count[counter],
+            // message_count_after_subscribed - cl->subscribed_read_count[counter]);
             write(cl->client_socket_id, buffer, strlen(buffer));
         }
     }
@@ -504,11 +496,11 @@ int checkClientCommand(channel *channels, struct Client *cl, char *buffer, char 
     }
     else if (strncmp("SUB", buffer, 3) == 0) // SUB command
     {
-        return subClientToChannel(channels, cl, buffer, error_message);
+        return subClientToChannel(cl, buffer, error_message);
     }
     else if (strncmp("UNSUB", buffer, 5) == 0) // UNSUB command
     {
-        return unsubClientToChannel(channels, cl, buffer, error_message);
+        return unsubClientToChannel(cl, buffer, error_message);
     }
     else if (strncmp("SEND", buffer, 4) == 0) // SEND command
     {
@@ -670,6 +662,8 @@ int main(int argc, char *argv[])
     // Semaphore initialisation
     sem_init(&mutex,0,1);
     sem_init(&writers_lock,0,1);
+    // Pthread mutex lock
+    pthread_mutex_init(&mutex_lock, NULL);
     // Initialising connected clients
     // Creating with initial size for 2 clients
     // Capacity is 1 by default

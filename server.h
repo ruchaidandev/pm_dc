@@ -116,12 +116,12 @@ void pushMessageToChannel(channel *channels, struct Client *cl, int channel_id, 
 /**
  * Subscribe client to channel function
  */
-int subClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message);
+int subClientToChannel(struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Unsubscribe client to channel function
  */
-int unsubClientToChannel(channel *channels, struct Client *cl, char *buffer, char *error_message);
+int unsubClientToChannel(struct Client *cl, char *buffer, char *error_message);
 
 /**
  * Send message to the channel function
