@@ -666,7 +666,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in servaddr;
     // Shared memory
     channel *channels;
-    int *client_unique_id;
+
     // Semaphore initialisation
     sem_init(&mutex,0,1);
     sem_init(&writers_lock,0,1);
@@ -716,7 +716,7 @@ int main(int argc, char *argv[])
          exit(-1);
     }
     
-    *client_unique_id = (int *) shmat(client_shm_id, (void *) 0, 0);
+    int *client_unique_id = (int *) shmat(client_shm_id, (void *) 0, 0);
     
     // Setting default value to the shared client id
     int default_client_id = 0;
