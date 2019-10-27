@@ -73,15 +73,15 @@ void chat()
             printf("Client disconnected.\n");
             exit(0);
         }
-        // else if (strncmp("LIVEFEED", buff, 8) == 0) // LIVEFEED Command
-        // {
+        else if (strncmp("LIVEFEED", buff, 8) == 0) // LIVEFEED Command
+        {
 
-        //     write(socket_server, buff, sizeof(buff));
-        //     // Setting the buffer all zeros
-        //     memset(buff, 0, MAX_BUFFER);
-        //     read(socket_server, buff, MAX_BUFFER);
+            write(socket_server, buff, sizeof(buff));
+            // Setting the buffer all zeros
+            memset(buff, 0, MAX_BUFFER);
+            read(socket_server, buff, MAX_BUFFER);
 
-        // }
+        }
 
         if (is_inifite_loop == false)
         {

@@ -1,5 +1,5 @@
 CC = c99
-CFLAGS = -g -Wall 
+CFLAGS =  
 LIBS = -pthread -lrt
 
 all: server client
