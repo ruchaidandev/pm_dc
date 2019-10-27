@@ -251,29 +251,34 @@ void displayChannelList(struct Client *cl, char *buffer)
  */
 int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel)
 {
-
+    printf("A1\n");
     shm_id = shmget(SHM_KEY, (sizeof(channel) * sizeof(key_t) * 150) * 256, IPC_CREAT | 0666);
     channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
     // For all messages in the channel
     for (int itr = 0; itr < channels[channel_id].message_count; itr++)
     {
+        printf("A2\n");
         int message_shm = shmget(channels[channel_id].messages_shm, sizeof(Message) * 150, IPC_CREAT | IPC_EXCL | 0666);
         if (message_shm < 0)
         {
+            printf("A3\n");
             Message *messages = (Message *)shmat(channels[channel_id].message_shm_id, (void *)0, 0);
-
+            printf("A4\n");
             // Checks the time of subscribed
             if (messages[itr].time > cl->subscribed_time[channel_id])
             {
+                printf("A5\n");
 
                 if (inArray(messages[itr].time, cl->read_messages, cl->read_messages_count) == 0)
                 {
-
+                    printf("A6\n");
+                    
                     int msg_shm_content = shmget(&messages[itr].content, 1024, IPC_CREAT | IPC_EXCL | 0666);
 
                     char *printing_msg = (char *)shmat(messages[itr].content_shm_id, (void *)0, 0); // Attaching
                     memset(buffer, 0, MAX_BUFFER);
                     // Checking whether to print the channel id
+                    printf("A7\n");
                     if (print_channel == true)
                     {
                         sprintf(buffer, "|LL|%d:%s", channel_id, printing_msg);
@@ -282,11 +287,24 @@ int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool 
                     {
                         sprintf(buffer, "|LL|%s", printing_msg);
                     }
+                    printf("A8\n");
+                    pthread_mutex_lock(&mutex_lock);
                     write(cl->client_socket_id, buffer, strlen(buffer));
+                    pthread_mutex_unlock(&mutex_lock);
+                    printf("A9\n");
+
                     // Adding the sending message to read by
                     pushReadByMessageToClient(cl, messages[itr].time);
 
                     shmdt(&msg_shm_content);
+                    
+                    printf("A10\n");
+                    
+                    shmdt(&message_shm); // Detaching
+                    shmdt(&shm_id); // Detaching
+                    if(pthread_self() != NULL){
+                        pthread_join(pthread_self(), NULL);
+                    }
                     return 4;
                 }
             }
@@ -437,7 +455,7 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
  */
 int getNextMessage(struct Client *cl, char *buffer, char *error_message)
 {
-
+    
     char *value;
     value = strtok(buffer, " ");
 
@@ -482,9 +500,18 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             else
             {
 
-                // For all messages in the channel
-                getNextChannelMessage(cl, channel_id, buffer, false);
+                // Creating new thread
+                pthread_t thread_id;
+                struct ThreadArgs threadArgs = {
+                    cl,
+                    channel_id,
+                    false
+                };
+        
+                pthread_create(&thread_id, NULL, nextBgThread, &threadArgs);
+                
                 memset(buffer, 0, MAX_BUFFER);
+                printf("HERE SDSDSDS\n");
                 return 4;
             }
         }
@@ -604,6 +631,18 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
     }
 }
 
+/**
+ * Background thread for NEXT Command
+ */
+void *nextBgThread(void * param)
+{
+    struct ThreadArgs *threadArgs = param;
+    char buffer[MAX_BUFFER];
+    memset(buffer, 0, MAX_BUFFER);
+    int response = getNextChannelMessage(threadArgs->cl, threadArgs->channel_id, buffer, threadArgs->print_channel);
+    
+    
+} 
 /**printf("%s\n",response);
  * Client command check
  * Return:
@@ -770,16 +809,13 @@ void connectClient()
         // If new client
         if (socket_client > 0)
         {
-            // Creating new thread
-            pthread_t thread_id;
             if (fork() == 0)
             {
                 // Creating shared memory for the channels
                 // Passing the socket client value
                 chat(socket_client);
             }
-
-            //pthread_create(&thread_id, NULL, &chat, &socket_client);
+           
         }
     }
 }

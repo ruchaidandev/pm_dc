@@ -75,6 +75,12 @@ struct ConnectedClients
     int client_capacity;
 } connectedClients;
 
+struct ThreadArgs{
+    struct Client *cl;
+    int channel_id;
+    bool print_channel;
+};
+
 // Global variables
 int socket_server;
 int shm_id;
@@ -164,6 +170,11 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message);
  * message for any channel
  */
 int getLiveFeed(struct Client *cl, char *buffer, char *error_message);
+
+/**
+ * Background thread for NEXT Command
+ */
+void *nextBgThread(void * param);
 
 /**
  * Client command check
