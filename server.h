@@ -46,7 +46,6 @@ struct Client
     int client_code;
     int subscribed_channels[256];
     long int subscribed_time[256];
-    int subscribed_read_count[256];
     long int *read_messages;
     int read_messages_count;
     int read_messages_capacity;
@@ -63,7 +62,6 @@ typedef struct message
 typedef struct Channel
 {
     int channel_id;
-    key_t **messages;
     int message_shm_id;
     int messages_shm;
     int message_count;

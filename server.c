@@ -161,13 +161,13 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
     Message *messages = (Message *)shmat(message_shm, (void *)0, 0); // Attaching
     if (channels[channel_id].message_count > channels[channel_id].message_capacity)
     {
-        // Re allocating memory with messages's size
-        int *response = realloc(channels[channel_id].messages, sizeof(key_t) * channels[channel_id].message_count);
+        // // Re allocating memory with messages's size
+        // int *response = realloc(channels[channel_id].messages, sizeof(key_t) * channels[channel_id].message_count);
 
-        if (response > 0)
-        {
-            channels[channel_id].message_capacity += 1;
-        }
+        // if (response > 0)
+        // {
+        //     channels[channel_id].message_capacity += 1;
+        // }
     }
     int message_index = channels[channel_id].message_count;
 
@@ -193,7 +193,6 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
     shmdt(&msg_shm_content);
 
     channels[channel_id].message_count += 1;
-    cl->subscribed_read_count[channel_id] += 1;
 
     // Detaching
     shmdt(&message_shm);
@@ -871,7 +870,6 @@ int main(int argc, char *argv[])
         key_t key = ftok(".", (counter * 100) + counter);
 
         channels[counter].channel_id = counter;
-        // channels[counter].messages = malloc(sizeof(key_t) * 150);
         channels[counter].messages_shm = shmget(key, sizeof(Message) * 150, IPC_CREAT | 0666);
         channels[counter].message_count = 0;
         channels[counter].message_capacity = 149;
