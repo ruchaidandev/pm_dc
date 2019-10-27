@@ -155,6 +155,7 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
     shm_id = shmget(SHM_KEY, sizeof(channel) * sizeof(key_t) * 150 * 256, IPC_CREAT | 0666);
     channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
 
+
     int message_shm = shmget(channels[channel_id].messages_shm, sizeof(Message) * 150, IPC_CREAT | 0666);
     Message *messages = (Message *)shmat(message_shm, (void *)0, 0); // Attaching
     if (channels[channel_id].message_count > channels[channel_id].message_capacity)
@@ -260,7 +261,6 @@ int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool 
         {
             Message *messages = (Message *)shmat(channels[channel_id].message_shm_id, (void *)0, 0);
 
-
             // Checks the time of subscribed
             if (messages[itr].time > cl->subscribed_time[channel_id])
             {
@@ -280,13 +280,13 @@ int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool 
                     {
                         sprintf(buffer, "|LL|%s", printing_msg);
                     }
-                 
+
                     write(cl->client_socket_id, buffer, strlen(buffer));
                     memset(buffer, 0, MAX_BUFFER);
                     // Adding the sending message to read by
                     pushReadByMessageToClient(cl, messages[itr].time);
                     shmdt(&msg_shm_content);
-          
+
                     return 1;
                 }
             }
@@ -455,16 +455,16 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
                 // For all messages in the channel
                 getNextChannelMessage(cl, itr, buffer, true);
                 memset(buffer, 0, MAX_BUFFER);
-                
             }
-            
         }
 
         if (not_subscribed_to_any == true)
         {
             sprintf(error_message, "Not subscribed to any channels.\n");
             return -1;
-        }else{
+        }
+        else
+        {
             return 4;
         }
     }

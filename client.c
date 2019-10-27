@@ -42,8 +42,7 @@ void chat()
     char buff[MAX_BUFFER];
     int n;
     char *value;
-    char command[4];
-    bool is_loop = false;
+
 
     memset(buff, 0, sizeof(buff));
     read(socket_server, buff, sizeof(buff));
@@ -80,7 +79,6 @@ void chat()
             // Setting the buffer all zeros
             memset(buff, 0, MAX_BUFFER);
             read(socket_server, buff, MAX_BUFFER);
-
         }
 
         if (is_inifite_loop == false)

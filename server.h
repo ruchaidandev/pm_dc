@@ -29,7 +29,6 @@
 #include <sys/shm.h>
 #include <semaphore.h>
 
-
 #define MAX_BUFFER 1035
 #define DEFAULT_PORT 12345
 #define MAX_CLIENT_QUEUE 5
