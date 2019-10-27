@@ -56,13 +56,15 @@ typedef struct message
 {
     int sender_id;
     long int time;
-    char content[];
+    key_t content;
+    int content_shm_id;
 } Message;
 
 typedef struct Channel
 {
     int channel_id;
     key_t **messages;
+    int message_shm_id;
     int messages_shm;
     int message_count;
     int message_capacity;

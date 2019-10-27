@@ -115,7 +115,7 @@ void chat()
 
 int main(int argc, char *argv[])
 {
-    struct sockaddr_in servaddr, cli;
+    struct sockaddr_in servaddr;
     struct hostent *server;
 
     // Creating socket
