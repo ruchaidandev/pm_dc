@@ -54,15 +54,16 @@ struct Client
 
 typedef struct message
 {
-    char *content;
     int sender_id;
     long int time;
+    char content[];
 } Message;
 
 typedef struct Channel
 {
     int channel_id;
     key_t **messages;
+    int messages_shm;
     int message_count;
     int message_capacity;
 } channel;
@@ -79,9 +80,7 @@ int socket_server;
 int shm_id;
 int client_shm_id;
 
-// Semaphore locks
-sem_t mutex, writers_lock;
-int readers_count = 0;
+// Pthread mutex locks
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Function definitions
@@ -104,8 +103,10 @@ struct Client initialiseClient(int socket_client, int client_id);
 
 /**
  * Value in array function
+ * Will return 1 if in array
+ * 0 when not in array
  */
-int inArray(long int val, long int arr[]);
+int inArray(long int val, long int arr[], int length);
 
 /**
  * Check the Client in the given channel

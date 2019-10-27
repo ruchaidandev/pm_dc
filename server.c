@@ -18,11 +18,19 @@ void signalCallbackHandler(int signum)
     close(socket_server);
 
     // Delete shared memory
+
+    // Deleting all shared memory for each channel
+    shm_id = shmget(SHM_KEY, (sizeof(channel) * sizeof(key_t) * 150) * 256, IPC_CREAT | 0666);
+    channel *channels = (channel *)shmat(shm_id, (void *)0, 0);
+
+    for (int channel_id = 0; channel_id < 256; channel_id++)
+    {
+        shmctl(channels[channel_id].messages_shm, IPC_RMID, NULL);
+    }
+    shmdt(&shm_id);
+
     shmctl(shm_id, IPC_RMID, NULL);
     shmctl(client_shm_id, IPC_RMID, NULL);
-
-    sem_destroy(&mutex);
-    sem_destroy(&writers_lock);
 
     printf("\n");
     // Exit program
@@ -81,14 +89,18 @@ struct Client initialiseClient(int socket_client, int client_id)
 
 /**
  * Value in array function
+ * Will return 1 if in array
+ * 0 when not in array
  */
-int inArray(long int val, long int arr[])
+int inArray(long int val, long int arr[], int length)
 {
     int i;
-    for (i = 0; i < (int)sizeof(arr) / sizeof(arr[0]); i++)
+    for (i = 0; i < length; i++)
     {
         if (arr[i] == val)
+        {
             return 1;
+        }
     }
     return 0;
 }
@@ -112,7 +124,7 @@ int checkClientInChannel(struct Client *cl, int channel_id)
 void updateConnectedClients(struct Client *cl)
 {
     // Process synchronisation
-    sem_wait(&mutex);
+    pthread_mutex_lock(&mutex_lock);
     // Critical section
     if (connectedClients.client_count > connectedClients.client_capacity)
     {
@@ -125,7 +137,7 @@ void updateConnectedClients(struct Client *cl)
     }
     connectedClients.clients[connectedClients.client_count] = cl;
     connectedClients.client_count += 1;
-    sem_post(&mutex);
+    pthread_mutex_unlock(&mutex_lock);
 }
 
 /**
@@ -133,12 +145,13 @@ void updateConnectedClients(struct Client *cl)
  */
 void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_client)
 {
-   
     pthread_mutex_lock(&mutex_lock);
-    shm_id = shmget(SHM_KEY, sizeof(channel) * sizeof(key_t) * 150 *  256, IPC_CREAT | 0666);
-    channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
     // Critical section
+    shm_id = shmget(SHM_KEY, sizeof(channel) * sizeof(key_t) * 150 * 256, IPC_CREAT | 0666);
+    channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
 
+    int message_shm = shmget(channels[channel_id].messages_shm, sizeof(Message) * 150, IPC_CREAT | 0666);
+    Message *messages = (Message *)shmat(message_shm, (void *)0, 0); // Attaching
     if (channels[channel_id].message_count > channels[channel_id].message_capacity)
     {
         // Re allocating memory with messages's size
@@ -152,37 +165,119 @@ void pushMessageToChannel(struct Client *cl, int channel_id, char *message_from_
 
     int message_index = channels[channel_id].message_count;
 
-    
-    // Creating a new message
-    long int msg_time = time(NULL);
-    // Attaching the message to the shared memory
-
-    key_t key = ftok(".", (channel_id * 10000) + message_index);
-    printf("%x\n", key);
-    int message_shm_id = shmget(key, sizeof(Message), IPC_CREAT | 0666);
-    Message *msg = (Message *)shmat(message_shm_id, (void *)0, 0); // Attaching
-
-
-    msg->content = malloc(sizeof(char) * 1024);
-    strncpy(msg->content, message_from_client, 1024);
-    msg->sender_id = cl->client_code;
-    msg->time = msg_time;
-
-    channels[channel_id].messages[message_index] = key;
-   
-
-printf("%x\n", channels[channel_id].messages[message_index]);
+    // Creating a new message in the shared memory
+    messages[message_index].sender_id = cl->client_code;
+    messages[message_index].time = time(NULL);
+    memset(messages[message_index].content, 0, 1024);
+    snprintf(messages[message_index].content, sizeof(*message_from_client), "%s", message_from_client);
 
     channels[channel_id].message_count += 1;
-
-    // Adding the sending message to read by
-    pushReadByMessageToClient(cl, msg_time);
     cl->subscribed_read_count[channel_id] += 1;
 
-    shmdt(message_shm_id); // Detaching
-    shmdt(shm_id); // Detaching
+    // Detaching
+    shmdt(&message_shm);
+    shmdt(&shm_id);
 
     pthread_mutex_unlock(&mutex_lock);
+}
+
+/**
+ * Display the channel list with tab delimeter
+ */
+void displayChannelList(struct Client *cl, char *buffer)
+{
+    for (int counter = 0; counter < 256; counter++)
+    {
+        if (cl->subscribed_channels[counter] == 1)
+        {
+            shm_id = shmget(SHM_KEY, sizeof(channel) * sizeof(key_t) * 150 * 256, IPC_CREAT | 0666);
+            channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
+
+            int message_count_after_subscribed = 0;
+            int read_count = 0;
+            for (int itr = 0; itr < channels[counter].message_count; itr++)
+            {
+                int message_shm = shmget(channels[counter].messages_shm, sizeof(Message) * 150, IPC_CREAT | 0666);
+                Message *messages = (Message *)shmat(message_shm, (void *)0, 0);
+                // Checks the time of subscribed
+                // Counts the total messages client did not read
+
+                if (&messages[itr] != NULL)
+                {
+                    if (messages[itr].time > cl->subscribed_time[counter])
+                    {
+                        message_count_after_subscribed += 1;
+                        printf("%ld TT\n", messages[itr].time);
+                        if (inArray(messages[itr].time, cl->read_messages, cl->read_messages_count) == 1)
+                        {
+                            read_count += 1;
+                        }
+                    }
+                }
+                shmdt(&message_shm);
+            }
+            memset(buffer, 0, MAX_BUFFER);
+            sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count,
+                    read_count,
+                    message_count_after_subscribed);
+
+            write(cl->client_socket_id, buffer, strlen(buffer));
+
+            shmdt(&shm_id); // Detaching
+        }
+    }
+}
+
+/**
+ * Get the next channel message for the given channel
+ */
+int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel)
+{
+    shm_id = shmget(SHM_KEY, (sizeof(channel) * sizeof(key_t) * 150) * 256, IPC_CREAT | 0666);
+    channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
+    // For all messages in the channel
+    for (int itr = 0; itr < channels[channel_id].message_count; itr++)
+    {
+        int message_shm = shmget(channels[channel_id].messages_shm, sizeof(Message) * 150, IPC_CREAT | 0666);
+        Message *messages = (Message *)shmat(message_shm, (void *)0, 0);
+
+        if (&messages[itr] != NULL)
+        {
+            for (int read_itr = 0;
+                 read_itr < channels[channel_id].message_count; read_itr++)
+            {
+
+                // Checks the time of subscribed
+                printf("%ld\n", &messages[itr].time);
+                if (&messages[itr].time > cl->subscribed_time[channel_id])
+                {
+
+                    if (inArray(&messages[itr].time, cl->read_messages, cl->read_messages_count) == 0)
+                    {
+                        printf("%s\n", &messages[itr].content);
+                        // Adding the sending message to read by
+                        pushReadByMessageToClient(cl, &messages[itr].time);
+                        char *printing_msg = &messages[itr].content;
+                        memset(buffer, 0, MAX_BUFFER);
+                        // Checking whether to print the channel id
+                        if (print_channel == true)
+                        {
+                            sprintf(buffer, "|LL|%d:%s", channel_id, printing_msg);
+                        }
+                        else
+                        {
+                            sprintf(buffer, "|LL|%s", printing_msg);
+                        }
+                        write(cl->client_socket_id, buffer, strlen(buffer));
+                    }
+                    return 4;
+                }
+            }
+        }
+        shmdt(&message_shm); // Detaching
+    }
+    shmdt(&shm_id); // Detaching
+    return 4;
 }
 
 /**
@@ -319,107 +414,6 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
 }
 
 /**
- * Display the channel list with tab delimeter
- */
-void displayChannelList(struct Client *cl, char *buffer)
-{
-    for (int counter = 0; counter < 256; counter++)
-    {
-        if (cl->subscribed_channels[counter] == 1)
-        {
-            shm_id = shmget(SHM_KEY,  sizeof(channel) * sizeof(key_t) * 150 *  256, IPC_CREAT | 0666);
-            channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
-
-            int message_count_after_subscribed = 0;
-            int read_count = 0;
-            for (int itr = 0; itr < channels[counter].message_count; itr++)
-            {
-                // Checks the time of subscribed
-                // Counts the total messages client did not read
-                if (channels[counter].messages[itr] != NULL)
-                {
-                    printf("%x u\n", channels[counter].messages[itr] );
-                    int message_shm_id = shmget(channels[counter].messages[itr], sizeof(Message), IPC_CREAT | 0666);
-                    Message *msg = (Message *)shmat(message_shm_id, (void *)0, 0); // Attaching
-                    if (msg->time > cl->subscribed_time[counter])
-                    {
-                        message_count_after_subscribed += 1;
-                        if (inArray(msg->time, cl->read_messages) > 1)
-                        {
-                            read_count += 1;
-                        }
-                    }
-                    shmdt(message_shm_id);
-                }
-            }
-            memset(buffer, 0, MAX_BUFFER);
-            sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count,
-                    read_count,
-                    message_count_after_subscribed);
-
-            // sprintf(buffer, "|LL|%d\t%d\t%d\t%d\n", counter, channels[counter].message_count,
-            // cl->subscribed_read_count[counter],
-            // message_count_after_subscribed - cl->subscribed_read_count[counter]);
-            write(cl->client_socket_id, buffer, strlen(buffer));
-
-            shmdt(shm_id); // Detaching
-        }
-    }
-}
-
-/**
- * Get the next channel message for the given channel
- */
-int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel)
-{
-    shm_id = shmget(SHM_KEY, ( sizeof(channel) * sizeof(key_t) * 150 ) * 256, IPC_CREAT | 0666);
-    channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
-    printf("%d S\n", channels[channel_id].message_count);
-    // For all messages in the channel
-    for (int itr = 0; itr < channels[channel_id].message_count; itr++)
-    {
- printf("%x H1\n", channels[channel_id].messages[itr] );
-        if (channels[channel_id].messages[itr] != NULL)
-        {
-            printf("H1\n");
-            for (int read_itr = 0;
-                 read_itr < channels[channel_id].message_count; read_itr++)
-            {
-                printf("H2\n");
-                int message_shm_id = shmget(channels[channel_id].messages[read_itr], sizeof(Message), IPC_CREAT | 0666);
-                Message *msg = (Message *)shmat(message_shm_id, (void *)0, 0); // Attaching
-                                                                               // Checks the time of subscribed
-                if (msg->time > cl->subscribed_time[channel_id])
-                {
-
-                    if (inArray(msg->time, cl->read_messages) < 1)
-                    {
-                        printf("Here2\n");
-                        // Adding the sending message to read by
-                        pushReadByMessageToClient(cl, msg->time);
-                        memset(buffer, 0, MAX_BUFFER);
-                        // Checking whether to print the channel id
-                        if (print_channel == true)
-                        {
-                            sprintf(buffer, "|LL|%d:%s", channel_id, msg->content);
-                        }
-                        else
-                        {
-                            sprintf(buffer, "|LL|%s", msg->content);
-                        }
-                        write(cl->client_socket_id, buffer, strlen(buffer));
-                    }
-                    return 4;
-                }
-                shmdt(message_shm_id); // Detaching
-            }
-        }
-    }
-    shmdt(shm_id); // Detaching
-    return 4;
-}
-
-/**
  * Get the next message of a given channel or get the next 
  * message for any channel
  */
@@ -498,6 +492,7 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
     // When no channel is provided
     if (value == NULL)
     {
+        printf("A1\n");
         bool not_subscribed_to_any = true;
         for (int itr = 0; itr < 256; itr++)
         {
@@ -512,21 +507,25 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
             return -1;
         }
 
+        printf("A2\n");
         write(cl->client_socket_id, "OK", 2);
         memset(buffer, 0, MAX_BUFFER);
 
         // Iterating over all channels
         while (true)
         {
+            printf("H1\n");
 
             for (int itr = 0; itr < 256; itr++)
             {
+                printf("H2 %d\n", cl->subscribed_channels[itr]);
                 if (cl->subscribed_channels[itr] == 1)
                 {
                     /**
                      * Reading break point from client
                      */
                     memset(buffer, 0, MAX_BUFFER);
+                    printf("H3\n");
                     read(cl->client_socket_id, buffer, sizeof(buffer));
                     if (strncmp("OK", buffer, 2) == 0)
                     {
@@ -534,6 +533,7 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
                         break;
                         // Exit loop
                     }
+                    printf("H4\n");
                     getNextChannelMessage(cl, itr, buffer, false);
                 }
             }
@@ -604,15 +604,15 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
         close(cl->client_socket_id);
         return 2;
     }
-    else if (strncmp("SUB", buffer, 3) == 0) // SUB command
+    else if (strncmp("SUB ", buffer, 4) == 0) // SUB command
     {
         return subClientToChannel(cl, buffer, error_message);
     }
-    else if (strncmp("UNSUB", buffer, 5) == 0) // UNSUB command
+    else if (strncmp("UNSUB ", buffer, 6) == 0) // UNSUB command
     {
         return unsubClientToChannel(cl, buffer, error_message);
     }
-    else if (strncmp("SEND", buffer, 4) == 0) // SEND command
+    else if (strncmp("SEND ", buffer, 5) == 0) // SEND command
     {
         return sendMessageToChannel(cl, buffer, error_message);
     }
@@ -632,7 +632,8 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else
     {
-        return 4;
+        sprintf(error_message, "Invalid command.\n");
+        return -1;
     }
 
     return 0; // Return 0 by default
@@ -663,7 +664,7 @@ void chat(int socket_client)
     int value = *client_unique_id + 1;
     *client_unique_id = value;
     // Dettaching the shared memory
-    shmdt(client_unique_id);
+    shmdt(&client_unique_id);
 
     pthread_mutex_unlock(&mutex_lock);
 
@@ -705,7 +706,7 @@ void chat(int socket_client)
             // Close thread
             close(cl.client_socket_id);
             // Detattach memory
-            shmdt(shm_id);
+            shmdt(&shm_id);
             exit(1);
 
             //return NULL;
@@ -773,9 +774,7 @@ int main(int argc, char *argv[])
     // Shared memory
     channel *channels;
 
-    // Semaphore initialisation
-    sem_init(&mutex, 0, 1);
-    sem_init(&writers_lock, 0, 1);
+
     // Pthread mutex lock
     pthread_mutex_init(&mutex_lock, NULL);
     // Initialising connected clients
@@ -831,10 +830,10 @@ int main(int argc, char *argv[])
     int default_client_id = 0;
     client_unique_id = &default_client_id;
     // Dettaching the shared memory
-    shmdt(client_unique_id);
+    shmdt(&client_unique_id);
 
     // Shared memory for the channels
-    shm_id = shmget(SHM_KEY,  sizeof(channel) * sizeof(key_t) * 150  * 256 , IPC_CREAT | 0666);
+    shm_id = shmget(SHM_KEY, sizeof(channel) * sizeof(key_t) * 150 * 256, IPC_CREAT | 0666);
     if (shm_id < 0)
     {
         exit(-1);
@@ -847,14 +846,17 @@ int main(int argc, char *argv[])
     // Capacity is 149 by default
     for (int counter = 0; counter < 256; counter++)
     {
+        // To make sure to avoid overlap in keys,
+        // 100000 * the channel id + channel id (counter is channel id)
+        key_t key = ftok(".", (counter * 100000) + counter);
         channels[counter].channel_id = counter;
-        channels[counter].messages = malloc(sizeof(key_t) * 150);
+        // channels[counter].messages = malloc(sizeof(key_t) * 150);
+        channels[counter].messages_shm = shmget(key, sizeof(Message) * 150, IPC_CREAT | 0666);
         channels[counter].message_count = 0;
         channels[counter].message_capacity = 149;
     }
 
-    
-    shmdt(shm_id);
+    shmdt(&shm_id);
 
     // Connect clients to server
     connectClient();
@@ -865,6 +867,5 @@ int main(int argc, char *argv[])
     // Delete shared memory
     shmctl(shm_id, IPC_RMID, NULL);
     shmctl(client_shm_id, IPC_RMID, NULL);
-    sem_destroy(&mutex);
-    sem_destroy(&writers_lock);
+
 }
