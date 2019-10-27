@@ -249,7 +249,6 @@ void displayChannelList(struct Client *cl, char *buffer)
  */
 int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel)
 {
-
     shm_id = shmget(SHM_KEY, (sizeof(channel) * sizeof(key_t) * 150) * 256, IPC_CREAT | 0666);
     channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
     // For all messages in the channel
@@ -436,7 +435,6 @@ int sendMessageToChannel(struct Client *cl, char *buffer, char *error_message)
  */
 int getNextMessage(struct Client *cl, char *buffer, char *error_message)
 {
-
     char *value;
     value = strtok(buffer, " ");
 
@@ -453,7 +451,9 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             {
                 not_subscribed_to_any = false;
                 // For all messages in the channel
+                pthread_mutex_lock(&mutex_lock);
                 getNextChannelMessage(cl, itr, buffer, true);
+                pthread_mutex_unlock(&mutex_lock);
                 memset(buffer, 0, MAX_BUFFER);
                 
             }
@@ -482,9 +482,10 @@ int getNextMessage(struct Client *cl, char *buffer, char *error_message)
             }
             else
             {
-
                 // For all messages in the channel
+                pthread_mutex_lock(&mutex_lock);
                 getNextChannelMessage(cl, channel_id, buffer, false);
+                pthread_mutex_unlock(&mutex_lock);
                 memset(buffer, 0, MAX_BUFFER);
                 return 4;
             }
@@ -601,6 +602,23 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
 }
 
 /**
+ * Next command thread
+ */
+void * nextThreadCommand(void *param){
+    // Passing param data to the thread args
+    struct ThreadArgs *threadArgs = param;
+    int response = getNextMessage(threadArgs->cl, threadArgs->buffer, threadArgs->error_message);
+    if(response > 0){
+        // Closing the pthread
+        pthread_join(pthread_self(), NULL);
+    }else
+    {
+        pthread_exit(-1);
+    }
+    
+} 
+
+/**
  * Client command check
  * Return:
  *  0 : All good
@@ -640,7 +658,18 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     }
     else if (strncmp("NEXT", buffer, 4) == 0) // NEXT command
     {
-        return getNextMessage(cl, buffer, error_message);
+        // Thread args for the function
+
+        struct ThreadArgs threadArgs = {
+            cl, buffer, error_message
+        };
+
+        // Thread creation
+        pthread_t thread_id;
+
+        pthread_create(&thread_id, NULL, nextThreadCommand, &threadArgs);
+
+        return 5;
     }
     else if (strncmp("LIVEFEED", buffer, 8) == 0) // LIVEFEED command
     {
