@@ -249,6 +249,7 @@ void displayChannelList(struct Client *cl, char *buffer)
  */
 int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool print_channel)
 {
+
     shm_id = shmget(SHM_KEY, (sizeof(channel) * sizeof(key_t) * 150) * 256, IPC_CREAT | 0666);
     channel *channels = (channel *)shmat(shm_id, (void *)0, 0); // Attaching
     // For all messages in the channel
@@ -259,13 +260,13 @@ int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool 
         {
             Message *messages = (Message *)shmat(channels[channel_id].message_shm_id, (void *)0, 0);
 
+
             // Checks the time of subscribed
             if (messages[itr].time > cl->subscribed_time[channel_id])
             {
 
                 if (inArray(messages[itr].time, cl->read_messages, cl->read_messages_count) == 0)
                 {
-
                     int msg_shm_content = shmget(&messages[itr].content, 1024, IPC_CREAT | IPC_EXCL | 0666);
 
                     char *printing_msg = (char *)shmat(messages[itr].content_shm_id, (void *)0, 0); // Attaching
@@ -279,12 +280,13 @@ int getNextChannelMessage(struct Client *cl, int channel_id, char *buffer, bool 
                     {
                         sprintf(buffer, "|LL|%s", printing_msg);
                     }
+                 
                     write(cl->client_socket_id, buffer, strlen(buffer));
                     memset(buffer, 0, MAX_BUFFER);
                     // Adding the sending message to read by
                     pushReadByMessageToClient(cl, messages[itr].time);
                     shmdt(&msg_shm_content);
-
+          
                     return 1;
                 }
             }
@@ -598,7 +600,7 @@ int getLiveFeed(struct Client *cl, char *buffer, char *error_message)
     }
 }
 
-/**printf("%s\n",response);
+/**
  * Client command check
  * Return:
  *  0 : All good
@@ -640,15 +642,13 @@ int checkClientCommand(struct Client *cl, char *buffer, char *error_message)
     {
         return getNextMessage(cl, buffer, error_message);
     }
-    else if (strncmp("LIVEFEED", buffer, 9) == 0) // LIVEFEED command
+    else if (strncmp("LIVEFEED", buffer, 8) == 0) // LIVEFEED command
     {
-        printf("%s\n", buffer);
         return getLiveFeed(cl, buffer, error_message);
     }
     else
     {
-        sprintf(error_message, "Invalid command.\n");
-        return -1;
+        return 5;
     }
 
     return 0; // Return 0 by default

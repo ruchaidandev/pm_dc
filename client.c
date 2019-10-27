@@ -94,6 +94,7 @@ void chat()
         read(socket_server, buff, MAX_BUFFER);
         if (strncmp("OK", buff, 2) == 0)
         {
+            printf("HERES\n");
             is_inifite_loop = true;
             continue;
         }
